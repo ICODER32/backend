@@ -405,8 +405,11 @@ router.post("/sms/reply", async (req, res) => {
 
           const formattedTimes = user.reminderTimes.join(", ");
           const medNames = enabledMeds.map((p) => p.name).join(", ");
+          const formattedTimes12Hour = user.reminderTimes.map((time) =>
+            moment(time, "HH:mm").format("h:mm A")
+          );
 
-          reply = `Great! You'll get reminders for ${medNames} at these times: ${formattedTimes}.`;
+          reply = `Great! You'll get reminders for ${medNames} at these times: ${formattedTimes12Hour}.`;
           additionalMessage = `Reminder setup complete! If you'd like to access your personal settings, visit your dashboard here ${process.env.DASHBOARD_LINK} or type 'H' for more help.`;
         } else {
           reply = "Please enter a valid night time (e.g., 10 PM)";
@@ -436,11 +439,18 @@ router.post("/sms/reply", async (req, res) => {
             .filter((item) => item.prescriptionName === selectedMed.name)
             .map((item) => moment(item.scheduledTime).format("h:mm A"));
 
-          // Get unique times
+          // Get unique times and convert each time to 12 hour format
           const uniqueTimes = [...new Set(medTimes)];
-          const currentTimes = uniqueTimes.join(", ") || "not set";
+          const currentTimes = uniqueTimes.length
+            ? uniqueTimes.join(", ")
+            : "not set";
+          // Prepare reply with current times
+          const timeFormat = uniqueTimes.map((time) =>
+            moment(time, "HH:mm").format("h:mm A")
+          );
 
-          reply = `You have ${selectedMed.name} at ${currentTimes}. Reply with new time(s) in 12-hour format (e.g., 7am or 8:30pm). For multiple times, separate with commas.`;
+          // convert each time to 12 hour format
+          reply = `You have ${selectedMed.name} at ${timeFormat}. Reply with new time(s) in 12-hour format (e.g., 7am or 8:30pm). For multiple times, separate with commas.`;
         }
         break;
 
