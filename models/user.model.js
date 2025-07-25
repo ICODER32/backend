@@ -5,6 +5,7 @@ const caregiverSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+
   phoneNumber: {
     type: String,
     required: true,
@@ -101,6 +102,10 @@ const userSchema = new mongoose.Schema({
       },
       message: (props) => `${props.value} is not a valid phone number!`,
     },
+  },
+  timezone: {
+    type: String,
+    required: true,
   },
   sleepTime: String,
   wakeTime: String,
