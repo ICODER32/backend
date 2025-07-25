@@ -563,7 +563,7 @@ router.post("/sms/reply", async (req, res) => {
     await sendMessage(phone, additionalMessage);
   }
 
-  res.sendStatus(200);
+  // res.sendStatus(200);
 });
 
 // Helper function to send messages
