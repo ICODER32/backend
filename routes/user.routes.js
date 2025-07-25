@@ -35,6 +35,7 @@ cron.schedule("0 1 * * *", async () => {
 
 // SMS Reply Handler
 router.post("/sms/reply", async (req, res) => {
+  console.log(req.body);
   const from = req.body.From;
   const msg = req.body.Body?.trim();
   console.log(`Received message from ${from}: ${msg}`);
