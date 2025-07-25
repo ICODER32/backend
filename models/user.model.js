@@ -105,7 +105,6 @@ const userSchema = new mongoose.Schema({
   },
   timezone: {
     type: String,
-    required: true,
   },
   sleepTime: String,
   wakeTime: String,
