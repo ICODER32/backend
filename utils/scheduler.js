@@ -103,7 +103,7 @@ export const generateMedicationSchedule = (
         }
       }
 
-      let adjustedStart = DateTime.fromJSDate(startDate).setZone(timeZone);
+      let adjustedStart = DateTime.fromJSDate(startDate).setZone(timezone);
       if (skipFirstDay) {
         adjustedStart = adjustedStart.plus({ days: 1 });
       }

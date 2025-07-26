@@ -57,29 +57,29 @@ router.post("/sms/reply", async (req, res) => {
     user.temp = {};
   }
   // UPDATE TIME ZONE
-  if (req.FromState == "CA") {
+  if (req.body.FromState == "CA") {
     user.timezone = "America/Los_Angeles";
-  } else if (req.FromState == "NY") {
+  } else if (req.body.FromState == "NY") {
     user.timezone = "America/New_York";
-  } else if (req.FromState == "TX") {
+  } else if (req.body.FromState == "TX") {
     user.timezone = "America/Chicago";
-  } else if (req.FromState == "FL") {
+  } else if (req.body.FromState == "FL") {
     user.timezone = "America/New_York";
   }
   // Michigan
-  else if (req.FromState == "MI") {
+  else if (req.body.FromState == "MI") {
     user.timezone = "America/New_York";
-  } else if (req.FromState == "WA") {
+  } else if (req.body.FromState == "WA") {
     user.timezone = "America/Los_Angeles";
-  } else if (req.FromState == "OH") {
+  } else if (req.body.FromState == "OH") {
     user.timezone = "America/New_York";
-  } else if (req.FromState == "PA") {
+  } else if (req.body.FromState == "PA") {
     user.timezone = "America/New_York";
-  } else if (req.FromState == "IL") {
+  } else if (req.body.FromState == "IL") {
     user.timezone = "America/Chicago";
-  } else if (req.FromState == "NJ") {
+  } else if (req.body.FromState == "NJ") {
     user.timezone = "America/New_York";
-  } else if (req.FromState == "GA") {
+  } else if (req.body.FromState == "GA") {
     user.timezone = "America/New_York";
   }
 
