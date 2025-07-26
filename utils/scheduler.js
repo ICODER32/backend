@@ -1,3 +1,5 @@
+import { DateTime } from "luxon";
+
 // Calculate reminder times using wake/sleep and frequency
 export const calculateReminderTimes = (
   wakeTime,
@@ -10,17 +12,17 @@ export const calculateReminderTimes = (
 ) => {
   const times = [];
 
-  const formatTime = (hour, minute) =>
-    `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
-
   const [wakeHour, wakeMin] = wakeTime.split(":").map(Number);
   const [sleepHour, sleepMin] = sleepTime.split(":").map(Number);
   const wakeTotalMin = wakeHour * 60 + wakeMin;
   const sleepTotalMin = sleepHour * 60 + sleepMin;
   const totalAwakeMinutes = sleepTotalMin - wakeTotalMin;
 
+  const formatTime = (hour, minute) =>
+    `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+
   if (frequency === 1) {
-    const reminderMin = wakeTotalMin + 60; // 1 hour after wake time
+    const reminderMin = wakeTotalMin + 60;
     const hour = Math.floor(reminderMin / 60);
     const min = reminderMin % 60;
     times.push({
@@ -33,7 +35,6 @@ export const calculateReminderTimes = (
   }
 
   if (frequency === 2) {
-    // First: 1hr after wake, Second: 1hr before sleep
     const reminder1Min = wakeTotalMin + 60;
     const reminder2Min = sleepTotalMin - 60;
 
@@ -50,7 +51,7 @@ export const calculateReminderTimes = (
     return times;
   }
 
-  // Spread evenly if more than 2
+  // More than 2: Spread evenly
   const interval = totalAwakeMinutes / (frequency - 1);
   for (let i = 0; i < frequency; i++) {
     const reminderMin = wakeTotalMin + i * interval;
@@ -70,11 +71,11 @@ export const calculateReminderTimes = (
 // Generate full medication schedule for all reminders
 export const generateMedicationSchedule = (
   reminders,
-  startDate = new Date()
+  startDate = new Date(),
+  timeZone = "America/New_York"
 ) => {
   const schedule = [];
-  const now = new Date(); // Capture current time once
-
+  const now = DateTime.now().setZone(timeZone);
   const groupedByPrescription = reminders.reduce((acc, r) => {
     if (!acc[r.prescriptionName]) acc[r.prescriptionName] = [];
     acc[r.prescriptionName].push(r);
@@ -87,35 +88,36 @@ export const generateMedicationSchedule = (
       const totalPills = reminderArray[0].pillCount;
       const totalDays = Math.floor(totalPills / dailyDosage);
 
-      // Determine if we need to skip the first day for this prescription
+      // Check if we need to skip today
       let skipFirstDay = false;
       for (const reminder of reminderArray) {
         const [hour, minute] = reminder.time.split(":").map(Number);
-        const doseTime = new Date(startDate);
-        doseTime.setHours(hour, minute, 0, 0);
+        const doseTime = DateTime.fromJSDate(startDate)
+          .setZone(timeZone)
+          .set({ hour, minute, second: 0, millisecond: 0 });
+
         if (doseTime < now) {
           skipFirstDay = true;
-          break; // Skip entire day if any reminder has passed
+          break;
         }
       }
 
-      // Adjust start date: skip to next day if needed
-      const adjustedStartDate = new Date(startDate);
+      let adjustedStart = DateTime.fromJSDate(startDate).setZone(timeZone);
       if (skipFirstDay) {
-        adjustedStartDate.setDate(adjustedStartDate.getDate() + 1);
+        adjustedStart = adjustedStart.plus({ days: 1 });
       }
 
-      // Generate schedule for the calculated days
       for (let day = 0; day < totalDays; day++) {
+        const currentDay = adjustedStart.plus({ days: day });
+
         reminderArray.forEach((r) => {
           const [hour, minute] = r.time.split(":").map(Number);
-          const scheduledDateTime = new Date(adjustedStartDate);
-          scheduledDateTime.setDate(adjustedStartDate.getDate() + day);
-          scheduledDateTime.setHours(hour, minute, 0, 0);
+          const scheduledTime = currentDay.set({ hour, minute, second: 0 });
 
           schedule.push({
             prescriptionName,
-            scheduledTime: scheduledDateTime,
+            scheduledTime: scheduledTime.toISO(), // Store in ISO format with timezone
+            localTime: scheduledTime.toLocaleString(DateTime.DATETIME_MED), // Human-readable
             dosage: r.dosage,
             status: "pending",
           });
