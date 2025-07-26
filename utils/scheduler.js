@@ -75,6 +75,7 @@ export const generateMedicationSchedule = (
   startDate = new Date()
   // california time zone
 ) => {
+  console.log(timezone);
   const schedule = [];
   const now = DateTime.now().setZone(timezone);
   const groupedByPrescription = reminders.reduce((acc, r) => {

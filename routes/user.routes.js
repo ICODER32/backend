@@ -35,7 +35,6 @@ cron.schedule("0 1 * * *", async () => {
 
 // SMS Reply Handler
 router.post("/sms/reply", async (req, res) => {
-  console.log(req.body);
   const from = req.body.From;
   const msg = req.body.Body?.trim();
   console.log(`Received message from ${from}: ${msg}`);
@@ -295,9 +294,10 @@ router.post("/sms/reply", async (req, res) => {
       );
 
       user.reminderTimes = uniqueReminders.map((r) => r.time);
+
       user.medicationSchedule = generateMedicationSchedule(
         uniqueReminders,
-        user.timezone
+        user
       );
       user.flowStep = "done";
 
@@ -430,7 +430,11 @@ router.post("/sms/reply", async (req, res) => {
           );
 
           user.reminderTimes = uniqueReminders.map((r) => r.time);
-          user.medicationSchedule = generateMedicationSchedule(uniqueReminders);
+          console.log(user.timezone);
+          user.medicationSchedule = generateMedicationSchedule(
+            uniqueReminders,
+            user.timezone
+          );
           user.status = "active";
           user.notificationsEnabled = true;
           user.flowStep = "done";
@@ -604,7 +608,6 @@ async function sendMessage(phone, message) {
     await client.messages.create({
       body: message,
       from: process.env.TWILIO_PHONE_NUMBER,
-      // to: `whatsapp:+${phone}`, // Use WhatsApp format
       to: `+${phone}`, // Use SMS format if needed
     });
     console.log(`Message sent to ${phone}: ${message}`);
