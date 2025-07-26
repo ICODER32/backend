@@ -72,7 +72,8 @@ export const calculateReminderTimes = (
 export const generateMedicationSchedule = (
   reminders,
   startDate = new Date(),
-  timeZone = "America/New_York"
+  // california time zone
+  timeZone = "America/Los_Angeles"
 ) => {
   const schedule = [];
   const now = DateTime.now().setZone(timeZone);
