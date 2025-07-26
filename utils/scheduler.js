@@ -71,12 +71,12 @@ export const calculateReminderTimes = (
 // Generate full medication schedule for all reminders
 export const generateMedicationSchedule = (
   reminders,
-  startDate = new Date(),
+  timezone,
+  startDate = new Date()
   // california time zone
-  timeZone = "America/Los_Angeles"
 ) => {
   const schedule = [];
-  const now = DateTime.now().setZone(timeZone);
+  const now = DateTime.now().setZone(timezone);
   const groupedByPrescription = reminders.reduce((acc, r) => {
     if (!acc[r.prescriptionName]) acc[r.prescriptionName] = [];
     acc[r.prescriptionName].push(r);
@@ -94,7 +94,7 @@ export const generateMedicationSchedule = (
       for (const reminder of reminderArray) {
         const [hour, minute] = reminder.time.split(":").map(Number);
         const doseTime = DateTime.fromJSDate(startDate)
-          .setZone(timeZone)
+          .setZone(timezone)
           .set({ hour, minute, second: 0, millisecond: 0 });
 
         if (doseTime < now) {

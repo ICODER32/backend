@@ -56,6 +56,34 @@ router.post("/sms/reply", async (req, res) => {
   if (!user.temp) {
     user.temp = {};
   }
+  // UPDATE TIME ZONE
+  if (req.FromState == "CA") {
+    user.timezone = "America/Los_Angeles";
+  } else if (req.FromState == "NY") {
+    user.timezone = "America/New_York";
+  } else if (req.FromState == "TX") {
+    user.timezone = "America/Chicago";
+  } else if (req.FromState == "FL") {
+    user.timezone = "America/New_York";
+  }
+  // Michigan
+  else if (req.FromState == "MI") {
+    user.timezone = "America/New_York";
+  } else if (req.FromState == "WA") {
+    user.timezone = "America/Los_Angeles";
+  } else if (req.FromState == "OH") {
+    user.timezone = "America/New_York";
+  } else if (req.FromState == "PA") {
+    user.timezone = "America/New_York";
+  } else if (req.FromState == "IL") {
+    user.timezone = "America/Chicago";
+  } else if (req.FromState == "NJ") {
+    user.timezone = "America/New_York";
+  } else if (req.FromState == "GA") {
+    user.timezone = "America/New_York";
+  }
+
+  await user.save(); // Save timezone change
 
   const lowerMsg = msg.toLowerCase();
   let reply = "";
@@ -267,7 +295,10 @@ router.post("/sms/reply", async (req, res) => {
       );
 
       user.reminderTimes = uniqueReminders.map((r) => r.time);
-      user.medicationSchedule = generateMedicationSchedule(uniqueReminders);
+      user.medicationSchedule = generateMedicationSchedule(
+        uniqueReminders,
+        user.timezone
+      );
       user.flowStep = "done";
 
       reply = "Reminders resumed for all medications!";
