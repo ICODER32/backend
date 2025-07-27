@@ -11,39 +11,88 @@ export const calculateReminderTimes = (
   dosage
 ) => {
   const times = [];
+  const normalizedInstructions = instructions.toLowerCase();
 
+  // Parse times to minutes since midnight
   const [wakeHour, wakeMin] = wakeTime.split(":").map(Number);
   const [sleepHour, sleepMin] = sleepTime.split(":").map(Number);
   const wakeTotalMin = wakeHour * 60 + wakeMin;
   const sleepTotalMin = sleepHour * 60 + sleepMin;
-  const totalAwakeMinutes = sleepTotalMin - wakeTotalMin;
 
-  const formatTime = (hour, minute) =>
-    `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+  const formatTime = (totalMinutes) => {
+    const hour = Math.floor(totalMinutes / 60) % 24;
+    const min = Math.floor(totalMinutes % 60);
+    return `${hour.toString().padStart(2, "0")}:${min
+      .toString()
+      .padStart(2, "0")}`;
+  };
 
+  // Helper to check for specific instruction keywords
+  const isBeforeBed =
+    normalizedInstructions.includes("bed") ||
+    normalizedInstructions.includes("sleep");
+  const isWithBreakfast =
+    normalizedInstructions.includes("breakfast") ||
+    normalizedInstructions.includes("morning");
+  const isAfterMeal =
+    normalizedInstructions.includes("after meal") ||
+    normalizedInstructions.includes("after food");
+  const isBeforeMeal =
+    normalizedInstructions.includes("before meal") ||
+    normalizedInstructions.includes("before food");
+
+  // Handle single dose medications
   if (frequency === 1) {
-    const reminderMin = wakeTotalMin + 60;
-    const hour = Math.floor(reminderMin / 60);
-    const min = reminderMin % 60;
+    let reminderMin;
+
+    if (isBeforeBed) {
+      reminderMin = sleepTotalMin - 60; // 1 hour before bed
+    } else if (isWithBreakfast) {
+      reminderMin = wakeTotalMin + 60; // 1 hour after wake
+    } else if (isAfterMeal || isBeforeMeal) {
+      // Default to lunch time (midpoint between wake and sleep)
+      reminderMin =
+        wakeTotalMin + Math.floor((sleepTotalMin - wakeTotalMin) / 2);
+    } else {
+      // Default: 1 hour after wake time
+      reminderMin = wakeTotalMin + 60;
+    }
+
     times.push({
       prescriptionName: name,
-      time: formatTime(hour, min),
+      time: formatTime(reminderMin),
       dosage,
       pillCount,
     });
     return times;
   }
 
+  // Handle two doses
   if (frequency === 2) {
-    const reminder1Min = wakeTotalMin + 60;
-    const reminder2Min = sleepTotalMin - 60;
+    let firstDose, secondDose;
 
-    [reminder1Min, reminder2Min].forEach((m) => {
-      const hour = Math.floor(m / 60);
-      const min = m % 60;
+    if (isBeforeBed) {
+      // Second dose before bed, first dose at midpoint
+      secondDose = sleepTotalMin - 60;
+      firstDose = wakeTotalMin + Math.floor((secondDose - wakeTotalMin) / 2);
+    } else if (isWithBreakfast) {
+      // First dose with breakfast, second dose at midpoint
+      firstDose = wakeTotalMin + 60;
+      secondDose = firstDose + Math.floor((sleepTotalMin - firstDose) / 2);
+    } else if (normalizedInstructions.includes("dinner")) {
+      // First with breakfast, second with dinner
+      firstDose = wakeTotalMin + 60;
+      secondDose = sleepTotalMin - 60;
+    } else {
+      // Default: breakfast and dinner times
+      firstDose = wakeTotalMin + 60;
+      secondDose = sleepTotalMin - 60;
+    }
+
+    [firstDose, secondDose].forEach((dose) => {
       times.push({
         prescriptionName: name,
-        time: formatTime(hour, min),
+        time: formatTime(dose),
         dosage,
         pillCount,
       });
@@ -51,15 +100,37 @@ export const calculateReminderTimes = (
     return times;
   }
 
-  // More than 2: Spread evenly
-  const interval = totalAwakeMinutes / (frequency - 1);
+  // Handle three or more doses
+  const buffer = 60; // 1-hour buffer before/after sleep
+  let startTime = wakeTotalMin;
+  let endTime = sleepTotalMin;
+
+  // Adjust boundaries based on instructions
+  if (isWithBreakfast) startTime += 60;
+  if (isBeforeBed) endTime -= 60;
+
+  // Ensure valid time range
+  if (endTime <= startTime) endTime = startTime + 60 * frequency;
+
+  const timeRange = endTime - startTime;
+  const interval = timeRange / (frequency - 1);
+
+  // Generate dose times
   for (let i = 0; i < frequency; i++) {
-    const reminderMin = wakeTotalMin + i * interval;
-    const hour = Math.floor(reminderMin / 60);
-    const min = Math.round(reminderMin % 60);
+    let doseTime = startTime + i * interval;
+
+    // Adjust last dose if "before bed" specified
+    if (isBeforeBed && i === frequency - 1) {
+      doseTime = sleepTotalMin - 60;
+    }
+    // Adjust first dose if "with breakfast" specified
+    else if (isWithBreakfast && i === 0) {
+      doseTime = wakeTotalMin + 60;
+    }
+
     times.push({
       prescriptionName: name,
-      time: formatTime(hour, min),
+      time: formatTime(doseTime),
       dosage,
       pillCount,
     });

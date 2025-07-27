@@ -80,6 +80,9 @@ router.post("/sms/reply", async (req, res) => {
     user.timezone = "America/New_York";
   } else if (req.body.FromState == "GA") {
     user.timezone = "America/New_York";
+  } else {
+    // islamabad pakistan
+    user.timezone = "Asia/Karachi";
   }
 
   await user.save(); // Save timezone change
@@ -297,7 +300,7 @@ router.post("/sms/reply", async (req, res) => {
 
       user.medicationSchedule = generateMedicationSchedule(
         uniqueReminders,
-        user
+        user.timezone
       );
       user.flowStep = "done";
 
@@ -430,7 +433,6 @@ router.post("/sms/reply", async (req, res) => {
           );
 
           user.reminderTimes = uniqueReminders.map((r) => r.time);
-          console.log(user.timezone);
           user.medicationSchedule = generateMedicationSchedule(
             uniqueReminders,
             user.timezone
@@ -439,13 +441,36 @@ router.post("/sms/reply", async (req, res) => {
           user.notificationsEnabled = true;
           user.flowStep = "done";
 
-          const formattedTimes = user.reminderTimes.join(", ");
-          const medNames = enabledMeds.map((p) => p.name).join(", ");
-          const formattedTimes12Hour = user.reminderTimes.map((time) =>
-            moment(time, "HH:mm").format("h:mm A")
-          );
+          // Group medications by time and format the message
+          const groupedByTime = {};
+          uniqueReminders.forEach((reminder) => {
+            const time12h = moment(reminder.time, "HH:mm").format("h:mm A");
+            if (!groupedByTime[time12h]) {
+              groupedByTime[time12h] = [];
+            }
+            groupedByTime[time12h].push(reminder.prescriptionName);
+          });
 
-          reply = `Great! You'll get reminders for ${medNames} at these times: ${formattedTimes12Hour}.`;
+          // Group medications by name for the alternative format
+          const groupedByMed = {};
+          uniqueReminders.forEach((reminder) => {
+            const medName = reminder.prescriptionName;
+            const time12h = moment(reminder.time, "HH:mm").format("h:mm A");
+            if (!groupedByMed[medName]) {
+              groupedByMed[medName] = [];
+            }
+            groupedByMed[medName].push(time12h);
+          });
+
+          // Create the formatted message
+          let medicationList = [];
+          for (const [medName, times] of Object.entries(groupedByMed)) {
+            medicationList.push(`${medName} at ${times.join(", ")}`);
+          }
+
+          const formattedSchedule = medicationList.join("; ");
+
+          reply = `Great! You'll get reminders for:\n${formattedSchedule}.`;
           additionalMessage = `Reminder setup complete! If you'd like to access your personal settings, visit your dashboard here ${process.env.DASHBOARD_LINK} or type 'H' for more help.`;
         } else {
           reply = "Please enter a valid night time (e.g., 10 PM)";
@@ -567,7 +592,10 @@ router.post("/sms/reply", async (req, res) => {
           );
 
           user.reminderTimes = uniqueReminders.map((r) => r.time);
-          user.medicationSchedule = generateMedicationSchedule(uniqueReminders);
+          user.medicationSchedule = generateMedicationSchedule(
+            uniqueReminders,
+            user.timezone
+          );
           user.flowStep = "done";
           user.temp = {}; // Clear temp data
 
@@ -584,7 +612,8 @@ router.post("/sms/reply", async (req, res) => {
         break;
 
       default:
-        reply = "Sorry, I didn't understand that. Need help? Text HELP";
+        reply =
+          "sorry, I didn't understand you. need help, text help ( change need help text H)";
     }
   }
 
@@ -605,11 +634,12 @@ router.post("/sms/reply", async (req, res) => {
 // Helper function to send messages
 async function sendMessage(phone, message) {
   try {
-    await client.messages.create({
-      body: message,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: `+${phone}`, // Use SMS format if needed
-    });
+    //   await client.messages.create({
+    //     body: message,
+    //     from: process.env.TWILIO_PHONE_NUMBER,
+    //     to: `+${phone}`, // Use SMS format if needed
+    //   });
+    console.log(message);
     console.log(`Message sent to ${phone}: ${message}`);
   } catch (error) {
     console.error("Error sending message:", error);

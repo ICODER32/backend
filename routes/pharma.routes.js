@@ -61,13 +61,15 @@ router.post("/addPharmacy", async (req, res) => {
       .join("\n");
 
     // Send initial message
-    await client.messages.create({
-      body: `Welcome to CareTrackRX – your personal pill reminder!
+    const message = `Welcome to CareTrackRX – your personal pill reminder!
 We’ve received your prescriptions:\n${medList}\n\nTo set reminders, reply with the number(s):
-1, 2, 3. \n We’ll take care of the rest!`,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: `+${phoneNumber}`,
-    });
+1, 2, 3. \n We’ll take care of the rest!`;
+    // await client.messages.create({
+    //   body: message,
+    //   from: process.env.TWILIO_PHONE_NUMBER,
+    //   to: `+${phoneNumber}`,
+    // });
+    console.log(message);
     console.log(
       `Welcome message sent to +${phoneNumber} with medications:\n${medList}`
     );

@@ -36,13 +36,14 @@ export function startReminderCron() {
 
           if (dueReminders.length === 0) continue;
 
-          // Group by prescription name
-          const medicationsByPrescription = {};
+          // Group by prescription name with times
+          const medicationsMap = {};
           dueReminders.forEach((reminder) => {
-            if (!medicationsByPrescription[reminder.prescriptionName]) {
-              medicationsByPrescription[reminder.prescriptionName] = [];
+            const timeStr = moment(reminder.scheduledTime).format("h:mm a");
+            if (!medicationsMap[reminder.prescriptionName]) {
+              medicationsMap[reminder.prescriptionName] = new Set();
             }
-            medicationsByPrescription[reminder.prescriptionName].push(reminder);
+            medicationsMap[reminder.prescriptionName].add(timeStr);
           });
 
           // Check if we recently sent a reminder
@@ -58,27 +59,22 @@ export function startReminderCron() {
             continue;
           }
 
-          // Create medication list message
+          // Create formatted medication list
           let message = "💊 Medication Reminder:\n";
-          for (const [prescriptionName, reminders] of Object.entries(
-            medicationsByPrescription
-          )) {
-            message += `\n*${prescriptionName}*:\n`;
-            reminders.forEach((reminder) => {
-              const time = moment(reminder.scheduledTime).format("HH:mm A");
-              message += `- ${time}\n`;
-            });
+          for (const [medication, times] of Object.entries(medicationsMap)) {
+            const sortedTimes = [...times].sort((a, b) =>
+              moment(a, "h:mm a").diff(moment(b, "h:mm a"))
+            );
+            message += `\n• ${medication}: ${sortedTimes.join(", ")}`;
           }
-          message += "\nPlease reply D to confirm taken or S to skip.";
-
-          // Send WhatsApp message to user
-          await client.messages.create({
-            body: message,
-            //from: "whatsapp:+14155238886",
-            from: process.env.TWILIO_PHONE_NUMBER, // Uncomment if using SMS
-            //to: `whatsapp:+${user.phoneNumber}`,
-            to: `+${user.phoneNumber}`, // Use SMS format if needed
-          });
+          message += "\n\nReply D to confirm or S to skip.";
+          console.log(message);
+          // Send message
+          // await client.messages.create({
+          //   body: message,
+          //   from: process.env.TWILIO_PHONE_NUMBER,
+          //   to: `+${user.phoneNumber}`,
+          // });
 
           console.log(
             `✅ Reminder sent to ${user.phoneNumber} for ${dueReminders.length} medications`
@@ -87,24 +83,15 @@ export function startReminderCron() {
           // Update user tracking and schedule
           user.tracking.lastReminderSent = now.toDate();
 
-          // Record in notification history
+          // Store unique medication names for follow-up
+          const uniqueMeds = Object.keys(medicationsMap);
+
           user.notificationHistory.push({
             sentAt: now.toDate(),
-            message: `Sent reminder for ${dueReminders.length} due medications`,
+            message: `Sent reminder for ${uniqueMeds.length} medications`,
             status: "pending",
-            medications: dueReminders.map((r) => r.prescriptionName),
-          });
-
-          // Update schedule to mark as reminded
-          user.medicationSchedule = user.medicationSchedule.map((schedule) => {
-            const isDue = dueReminders.some(
-              (r) =>
-                r.scheduledTime.getTime() ===
-                  schedule.scheduledTime.getTime() &&
-                r.prescriptionName === schedule.prescriptionName
-            );
-            if (isDue) return { ...schedule, status: "pending" };
-            return schedule;
+            medications: uniqueMeds,
+            resends: 0,
           });
 
           await user.save();
@@ -170,13 +157,12 @@ async function notifyCaregivers(user, reminders) {
       medicationsToNotify.map((m) => `• ${m.name}`).join("\n");
 
     try {
-      await client.messages.create({
-        body: message,
-        // from: "whatsapp:+14155238886",
-        from: process.env.TWILIO_PHONE_NUMBER, // Uncomment if using SMS
-        to: `whatsapp:+${caregiver.phoneNumber}`,
-        to: `+${caregiver.phoneNumber}`, // Use SMS format if needed
-      });
+      // await client.messages.create({
+      //   body: message,
+      //   from: process.env.TWILIO_PHONE_NUMBER, // Uncomment if using SMS
+      //   to: `+${caregiver.phoneNumber}`, // Use SMS format if needed
+      // });
+      console.log(message);
       console.log(`   👩‍⚕️ Caregiver notified: ${caregiver.phoneNumber}`);
     } catch (error) {
       console.error(
@@ -209,23 +195,16 @@ export function startReminderFollowupCron() {
         for (const notification of pendingNotifications) {
           const sentAt = moment(notification.sentAt);
           const minutesPassed = now.diff(sentAt, "minutes");
-          console.log(
-            `⏳ Checking follow-up for ${user.phoneNumber}: ${minutesPassed} minutes since last notification`
-          );
+
           if (notification.resends === 0 && minutesPassed >= 2) {
-            // First resend
             await sendFollowupReminder(user, notification, 1);
           } else if (notification.resends === 1 && minutesPassed >= 4) {
-            // Second resend
             await sendFollowupReminder(user, notification, 2);
           } else if (notification.resends === 2 && minutesPassed >= 5) {
-            // Mark as skipped and notify caregivers
             notification.status = "skipped";
             console.log(
               `🚫 Marked reminder as skipped for ${user.phoneNumber}`
             );
-
-            // Notify caregivers about skipped medications
             const skippedReminders = notification.medications.map((name) => ({
               prescriptionName: name,
             }));
@@ -240,32 +219,24 @@ export function startReminderFollowupCron() {
     }
   });
 }
-
 async function sendFollowupReminder(user, notification, resendCount) {
   try {
-    const message = `🔁 Reminder again:
-    \nMedication: ${notification.medications.join(", ")}
-    \n(Attempt ${resendCount + 1}/3)
-    \nPlease reply D to confirm taken or S to skip.`;
+    const medList = notification.medications.join(", ");
+    const message = `It's time to take your medications: ${medList}.\n\nPlease reply:\nD – if you have taken them\nS – if you need to skip this dose\n\nThank you for using CareTrackRX.`;
 
     await client.messages.create({
       body: message,
-      //from: "whatsapp:+14155238886",
-      from: process.env.TWILIO_PHONE_NUMBER, // Uncomment if using SMS
-      //to: `whatsapp:+${user.phoneNumber}`,
-      to: `+${user.phoneNumber}`, // Use SMS format if needed
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: `+${user.phoneNumber}`,
     });
 
     console.log(
-      `📨 Follow-up reminder sent to ${user.phoneNumber} (resend ${resendCount})`
+      `📨 Follow-up sent to ${user.phoneNumber} (resend ${resendCount})`
     );
 
     notification.resends = resendCount;
   } catch (error) {
-    console.error(
-      `❌ Failed to resend reminder to ${user.phoneNumber}:`,
-      error
-    );
+    console.error(`❌ Failed to resend to ${user.phoneNumber}:`, error);
     notification.status = "failed";
     notification.error = error.message;
   }
