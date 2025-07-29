@@ -199,11 +199,11 @@ export function startReminderFollowupCron() {
           const sentAt = moment(notification.sentAt);
           const minutesPassed = now.diff(sentAt, "minutes");
 
-          if (notification.resends === 0 && minutesPassed >= 2) {
+          if (notification.resends === 0 && minutesPassed >= 20) {
             await sendFollowupReminder(user, notification, 1);
-          } else if (notification.resends === 1 && minutesPassed >= 4) {
+          } else if (notification.resends === 1 && minutesPassed >= 40) {
             await sendFollowupReminder(user, notification, 2);
-          } else if (notification.resends === 2 && minutesPassed >= 5) {
+          } else if (notification.resends === 2 && minutesPassed >= 45) {
             notification.status = "skipped";
             console.log(
               `🚫 Marked reminder as skipped for ${user.phoneNumber}`
