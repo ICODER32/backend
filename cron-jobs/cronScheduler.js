@@ -60,21 +60,24 @@ export function startReminderCron() {
           }
 
           // Create formatted medication list
-          let message = "💊 Medication Reminder:\n";
+          let message = "💊 It’s time to take your medications:\n";
           for (const [medication, times] of Object.entries(medicationsMap)) {
             const sortedTimes = [...times].sort((a, b) =>
               moment(a, "h:mm a").diff(moment(b, "h:mm a"))
             );
             message += `\n• ${medication}: ${sortedTimes.join(", ")}`;
           }
-          message += "\n\nReply D to confirm or S to skip.";
+          message += `Please reply:
+               \n D – if you have taken them
+               \n S – if you need to skip this dose
+               \n Thank you for using CareTrackRX.`;
           console.log(message);
           // Send message
-          // await client.messages.create({
-          //   body: message,
-          //   from: process.env.TWILIO_PHONE_NUMBER,
-          //   to: `+${user.phoneNumber}`,
-          // });
+          await client.messages.create({
+            body: message,
+            from: process.env.TWILIO_PHONE_NUMBER,
+            to: `+${user.phoneNumber}`,
+          });
 
           console.log(
             `✅ Reminder sent to ${user.phoneNumber} for ${dueReminders.length} medications`
@@ -157,11 +160,11 @@ async function notifyCaregivers(user, reminders) {
       medicationsToNotify.map((m) => `• ${m.name}`).join("\n");
 
     try {
-      // await client.messages.create({
-      //   body: message,
-      //   from: process.env.TWILIO_PHONE_NUMBER, // Uncomment if using SMS
-      //   to: `+${caregiver.phoneNumber}`, // Use SMS format if needed
-      // });
+      await client.messages.create({
+        body: message,
+        from: process.env.TWILIO_PHONE_NUMBER, // Uncomment if using SMS
+        to: `+${caregiver.phoneNumber}`, // Use SMS format if needed
+      });
       console.log(message);
       console.log(`   👩‍⚕️ Caregiver notified: ${caregiver.phoneNumber}`);
     } catch (error) {

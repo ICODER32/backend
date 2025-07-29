@@ -42,7 +42,6 @@ app.use("/api/pharmacy", PharmacyRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/login", loginRoutes);
 app.use("/api/caregivers", careGiverRoutes);
-
 console.log("Routes registered.");
 
 // Start the server and crons

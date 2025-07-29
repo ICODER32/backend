@@ -140,15 +140,24 @@ export const calculateReminderTimes = (
 };
 
 // Generate full medication schedule for all reminders
+const formatTime = (totalMinutes) => {
+  const hour = Math.floor(totalMinutes / 60) % 24;
+  const min = Math.floor(totalMinutes % 60);
+  return `${hour.toString().padStart(2, "0")}:${min
+    .toString()
+    .padStart(2, "0")}`;
+};
+
+// Generate full medication schedule
 export const generateMedicationSchedule = (
   reminders,
   timezone,
   startDate = new Date()
-  // california time zone
 ) => {
-  console.log(timezone);
-  const schedule = [];
   const now = DateTime.now().setZone(timezone);
+  const schedule = [];
+
+  // Group reminders by prescription name
   const groupedByPrescription = reminders.reduce((acc, r) => {
     if (!acc[r.prescriptionName]) acc[r.prescriptionName] = [];
     acc[r.prescriptionName].push(r);
@@ -161,36 +170,30 @@ export const generateMedicationSchedule = (
       const totalPills = reminderArray[0].pillCount;
       const totalDays = Math.floor(totalPills / dailyDosage);
 
-      // Check if we need to skip today
-      let skipFirstDay = false;
-      for (const reminder of reminderArray) {
-        const [hour, minute] = reminder.time.split(":").map(Number);
-        const doseTime = DateTime.fromJSDate(startDate)
-          .setZone(timezone)
-          .set({ hour, minute, second: 0, millisecond: 0 });
-
-        if (doseTime < now) {
-          skipFirstDay = true;
-          break;
-        }
-      }
-
-      let adjustedStart = DateTime.fromJSDate(startDate).setZone(timezone);
-      if (skipFirstDay) {
-        adjustedStart = adjustedStart.plus({ days: 1 });
-      }
+      const adjustedStart = DateTime.fromJSDate(startDate).setZone(timezone);
+      const today = adjustedStart.startOf("day");
 
       for (let day = 0; day < totalDays; day++) {
-        const currentDay = adjustedStart.plus({ days: day });
+        const currentDay = today.plus({ days: day });
 
         reminderArray.forEach((r) => {
           const [hour, minute] = r.time.split(":").map(Number);
-          const scheduledTime = currentDay.set({ hour, minute, second: 0 });
+          const scheduledTime = currentDay.set({
+            hour,
+            minute,
+            second: 0,
+            millisecond: 0,
+          });
+
+          // ✅ Skip today’s doses that are already past
+          if (day === 0 && scheduledTime < now) {
+            return; // skip this dose today
+          }
 
           schedule.push({
             prescriptionName,
-            scheduledTime: scheduledTime.toISO(), // Store in ISO format with timezone
-            localTime: scheduledTime.toLocaleString(DateTime.DATETIME_MED), // Human-readable
+            scheduledTime: scheduledTime.toISO(),
+            localTime: scheduledTime.toLocaleString(DateTime.DATETIME_MED),
             dosage: r.dosage,
             status: "pending",
           });

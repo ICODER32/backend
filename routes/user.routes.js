@@ -490,10 +490,17 @@ router.post("/sms/reply", async (req, res) => {
         } else {
           const selectedMed = enabledMeds[medIndex];
 
-          // Store medication name instead of ID
-          user.temp.selectedMedName = selectedMed.name;
+          // SOLUTION: Reassign the entire temp object
+          user.temp = {
+            ...user.temp, // Preserve existing temp properties
+            selectedMedName: selectedMed.name, // Add new property
+          };
+
           user.flowStep = "set_time_enter_time";
-          await user.save(); // Save immediately after setting flowStep
+          await user.save();
+          user.flowStep = "set_time_enter_time";
+          user = await user.save(); // Save immediately after setting flowStep
+          console.log(user.temp);
 
           // Get current times for this medication from schedule
           const medTimes = user.medicationSchedule
@@ -517,6 +524,7 @@ router.post("/sms/reply", async (req, res) => {
 
       case "set_time_enter_time":
         // Check if we have the selected medication name
+        console.log("selected meds", user.temp, user.temp.selectedMedName);
         if (!user.temp || !user.temp.selectedMedName) {
           reply = "Something went wrong. Please start over.";
           user.flowStep = "done";
@@ -612,8 +620,7 @@ router.post("/sms/reply", async (req, res) => {
         break;
 
       default:
-        reply =
-          "sorry, I didn't understand you. need help, text help ( change need help text H)";
+        reply = "Sorry, I didn't understand you. need help, text H.";
     }
   }
 
@@ -634,11 +641,11 @@ router.post("/sms/reply", async (req, res) => {
 // Helper function to send messages
 async function sendMessage(phone, message) {
   try {
-    //   await client.messages.create({
-    //     body: message,
-    //     from: process.env.TWILIO_PHONE_NUMBER,
-    //     to: `+${phone}`, // Use SMS format if needed
-    //   });
+    await client.messages.create({
+      body: message,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: `+${phone}`, // Use SMS format if needed
+    });
     console.log(message);
     console.log(`Message sent to ${phone}: ${message}`);
   } catch (error) {
