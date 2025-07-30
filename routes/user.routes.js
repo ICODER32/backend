@@ -8,6 +8,7 @@ import {
 } from "../utils/scheduler.js";
 import cron from "node-cron";
 import moment from "moment";
+import { DateTime } from "luxon";
 
 configDotenv();
 const router = express.Router();
@@ -564,11 +565,24 @@ router.post("/sms/reply", async (req, res) => {
         // Process time input
         const timeInputs = msg.split(",").map((t) => t.trim());
         const validTimes = [];
-        let invalidTimes = [];
+        const invalidTimes = [];
+
+        const today = moment().format("YYYY-MM-DD");
 
         for (const timeInput of timeInputs) {
           if (validateTimeAny(timeInput)) {
-            validTimes.push(parseTime(timeInput));
+            // Parse into moment object using timezone
+            const parsed = moment.tz(
+              `${today} ${timeInput}`,
+              "YYYY-MM-DD hh:mma",
+              user.timezone || "Asia/Karachi"
+            );
+
+            if (parsed.isValid()) {
+              validTimes.push(parsed.format("HH:mm")); // store just the time
+            } else {
+              invalidTimes.push(timeInput);
+            }
           } else {
             invalidTimes.push(timeInput);
           }
@@ -817,9 +831,8 @@ router.patch("/update/:id", async (req, res) => {
   const updateData = req.body;
 
   try {
-    // Find user by phone number
+    // 1. Find user by phone number
     const user = await User.findOne({ phoneNumber: updateData.phoneNumber });
-
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -827,7 +840,7 @@ router.patch("/update/:id", async (req, res) => {
       });
     }
 
-    // Find the specific prescription
+    // 2. Find the specific prescription by ID
     const prescription = user.prescriptions.id(prescriptionId);
     if (!prescription) {
       return res.status(404).json({
@@ -836,10 +849,9 @@ router.patch("/update/:id", async (req, res) => {
       });
     }
 
-    // Save old name for schedule updates
     const oldName = prescription.name;
 
-    // Update prescription fields
+    // 3. Update fields
     const fields = [
       "name",
       "dosage",
@@ -856,13 +868,14 @@ router.patch("/update/:id", async (req, res) => {
       }
     });
 
-    // Handle reminder times update if provided
+    // 4. Adjust and regenerate reminderTimes with timezone
     if (updateData.reminderTimes) {
-      // Convert times to 24-hour format for consistency
+      const userTimezone = user.timezone || "Asia/Karachi"; // default if missing
+
+      // Convert to 24-hour format
       const formattedTimes = updateData.reminderTimes.map((time) => {
         const [timePart, modifier] = time.split(" ");
-        if (!modifier) return time; // Already in 24h format
-
+        if (!modifier) return time; // Already 24h
         let [hours, minutes] = timePart.split(":");
         if (modifier === "PM" && hours !== "12") {
           hours = String(parseInt(hours, 10) + 12);
@@ -873,30 +886,35 @@ router.patch("/update/:id", async (req, res) => {
         return `${hours.padStart(2, "0")}:${minutes}`;
       });
 
-      // Remove existing schedule for this prescription
+      // Remove old schedule entries for this prescription
       user.medicationSchedule = user.medicationSchedule.filter(
         (item) => item.prescriptionName !== oldName || item.status !== "pending"
       );
 
-      // Add new schedule entries
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      // Generate new schedule for next 7 days in user timezone
+      const now = DateTime.now().setZone(userTimezone);
+      const today = now.startOf("day");
 
-      // Create schedule for next 7 days
       for (let day = 0; day < 7; day++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() + day);
+        const dayStart = today.plus({ days: day });
 
         for (const timeStr of formattedTimes) {
-          const [hours, minutes] = timeStr.split(":").map(Number);
-          const scheduledTime = new Date(date);
-          scheduledTime.setHours(hours);
-          scheduledTime.setMinutes(minutes);
+          const [hour, minute] = timeStr.split(":").map(Number);
 
-          // Only add future schedules
-          if (scheduledTime > now) {
+          const scheduled = DateTime.fromObject(
+            {
+              year: dayStart.year,
+              month: dayStart.month,
+              day: dayStart.day,
+              hour,
+              minute,
+            },
+            { zone: userTimezone }
+          );
+
+          if (scheduled > now) {
             user.medicationSchedule.push({
-              scheduledTime,
+              scheduledTime: scheduled.toJSDate(),
               status: "pending",
               prescriptionName: prescription.name,
             });
@@ -905,20 +923,20 @@ router.patch("/update/:id", async (req, res) => {
       }
     }
 
-    // Update meta data
+    // 5. Update metadata
     user.meta.updatedAt = new Date();
 
-    // Save changes
+    // 6. Save all changes
     await user.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Prescription updated successfully",
       prescription,
     });
   } catch (error) {
     console.error("Error updating prescription:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Server error while updating prescription",
       error: error.message,
