@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import moment from "moment";
+import moment from "moment-timezone";
 import User from "../models/user.model.js";
 import twilio from "twilio";
 import dotenv from "dotenv";
@@ -12,9 +12,9 @@ const client = twilio(
 
 export function startReminderCron() {
   cron.schedule("*/1 * * * *", async () => {
-    const now = moment().utcOffset(new Date().getTimezoneOffset() * -1);
+    const now = moment.utc();
     console.log(
-      `⏰ Starting reminder check at ${now.format("YYYY-MM-DD HH:mm:ss")}`
+      `⏰ Starting reminder check at ${now.format("YYYY-MM-DD HH:mm:ss")} UTC`
     );
 
     try {
@@ -27,6 +27,8 @@ export function startReminderCron() {
 
       for (const user of activeUsers) {
         try {
+          const userTimezone = user.timezone || "UTC";
+
           const hasPendingNotification = (prescriptionName) =>
             user.notificationHistory.some(
               (n) =>
@@ -38,11 +40,10 @@ export function startReminderCron() {
             if (schedule.status !== "pending") return false;
             if (schedule.reminderSent) return false;
 
-            const scheduledTime = moment(schedule.scheduledTime);
+            const scheduledTime = moment.utc(schedule.scheduledTime);
             const timeDiff = Math.abs(scheduledTime.diff(now, "minutes"));
             if (timeDiff > 2) return false;
 
-            // Avoid sending new reminder if a pending one exists
             if (hasPendingNotification(schedule.prescriptionName)) return false;
 
             return true;
@@ -50,10 +51,14 @@ export function startReminderCron() {
 
           if (dueReminders.length === 0) continue;
 
-          // Group by prescription name with times
+          // Group by prescription name with localized time strings
           const medicationsMap = {};
           dueReminders.forEach((reminder) => {
-            const timeStr = moment(reminder.scheduledTime).format("h:mm a");
+            const timeStr = moment
+              .utc(reminder.scheduledTime)
+              .tz(userTimezone)
+              .format("h:mm A");
+
             if (!medicationsMap[reminder.prescriptionName]) {
               medicationsMap[reminder.prescriptionName] = new Set();
             }
@@ -61,11 +66,10 @@ export function startReminderCron() {
           });
 
           // Create formatted medication list
-          let message = `CareTrackRX Reminder\n\n" +
-          💊 It’s time to take your medications:\n"`;
+          let message = `CareTrackRX Reminder\n\n💊 It’s time to take your medications:\n`;
           for (const [medication, times] of Object.entries(medicationsMap)) {
             const sortedTimes = [...times].sort((a, b) =>
-              moment(a, "h:mm a").diff(moment(b, "h:mm a"))
+              moment(a, "h:mm A").diff(moment(b, "h:mm A"))
             );
             message += `\n• ${medication}: ${sortedTimes.join(", ")}`;
           }
@@ -78,14 +82,14 @@ export function startReminderCron() {
             to: `+${user.phoneNumber}`,
           });
 
-          console.log(message);
+          console.log(`📤 Sent to ${user.phoneNumber}:\n${message}`);
 
-          // Mark these reminders as sent
+          // Mark reminders as sent
           for (const reminder of dueReminders) {
             reminder.reminderSent = true;
           }
 
-          // Update user tracking and history
+          // Update user tracking
           const uniqueMeds = Object.keys(medicationsMap);
           user.tracking.lastReminderSent = now.toDate();
           user.notificationHistory.push({
@@ -109,7 +113,9 @@ export function startReminderCron() {
         }
       }
 
-      console.log(`🏁 Reminder cycle completed at ${now.format("HH:mm:ss")}`);
+      console.log(
+        `🏁 Reminder cycle completed at ${now.format("HH:mm:ss")} UTC`
+      );
     } catch (error) {
       console.error("🚨 Critical error in reminder cycle:", error);
     }
@@ -173,9 +179,11 @@ async function notifyCaregivers(user, reminders) {
 
 export function startReminderFollowupCron() {
   cron.schedule("*/1 * * * *", async () => {
-    const now = moment().utcOffset(new Date().getTimezoneOffset() * -1);
+    const now = moment.utc();
     console.log(
-      `🔁 Checking follow-up reminders at ${now.format("YYYY-MM-DD HH:mm:ss")}`
+      `🔁 Checking follow-up reminders at ${now.format(
+        "YYYY-MM-DD HH:mm:ss"
+      )} UTC`
     );
 
     try {
@@ -229,7 +237,7 @@ async function sendFollowupReminder(user, notification, resendCount) {
       to: `+${user.phoneNumber}`,
     });
 
-    console.log(message);
+    console.log(`📤 Follow-up sent to ${user.phoneNumber}`);
 
     notification.resends = resendCount;
   } catch (error) {
