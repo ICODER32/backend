@@ -9,7 +9,6 @@ import {
 import cron from "node-cron";
 import moment from "moment";
 import { DateTime } from "luxon";
-import momentimzone from "moment-timezone";
 
 configDotenv();
 const router = express.Router();
@@ -245,36 +244,35 @@ router.post("/sms/reply", async (req, res) => {
       reply = "You don't have any active medications. Enable reminders first.";
       handled = true;
     } else {
-      const timezone = user.timezone || "Asia/Karachi"; // fallback if timezone not set
+      const timezoneOffset = user.timezoneOffset || 0; // ⏰ Offset in minutes, e.g. +300 for PKT
 
       const medList = enabledMeds
         .map((p, i) => {
-          // Get scheduled times for this medication
           const medTimes = user.medicationSchedule
             .filter((item) => item.prescriptionName === p.name)
             .map((item) =>
-              momentimzone(item.scheduledTime).tz(timezone).format("h:mm A")
+              moment
+                .utc(item.scheduledTime) // parse in UTC
+                .utcOffset(timezoneOffset) // shift to user's offset
+                .format("h:mm A")
             );
 
           const uniqueTimes = [...new Set(medTimes)];
 
           return `${i + 1}. ${p.name} (Current times: ${
-            uniqueTimes.length > 0 ? uniqueTimes.join(", ") : "not set"
+            uniqueTimes.join(", ") || "not set"
           })`;
         })
         .join("\n");
 
-      reply =
-        `Which pill would you like to set a custom time for?\n` +
-        `Reply with a number:\n${medList}\n` +
-        `(Type the number of the pill you want to change.)`;
-
+      reply = `Which pill would you like to set a custom time for?\nReply with a number:\n${medList}\n(Type the number of the pill you want to change.)`;
       user.flowStep = "set_time_select_med";
-      user.temp = {}; // Clear any previous temp
-      await user.save(); // Save user with flow step
+      user.temp = {};
+      await user.save();
       handled = true;
     }
   }
+
   if (!handled && lowerMsg === "pause") {
     user.status = "paused";
     user.tracking.optOutDate = now;
