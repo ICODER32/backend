@@ -244,31 +244,36 @@ router.post("/sms/reply", async (req, res) => {
       reply = "You don't have any active medications. Enable reminders first.";
       handled = true;
     } else {
-      // Build medication list with current times from medicationSchedule
+      const timezone = user.timezone || "Asia/Karachi"; // fallback if timezone not set
+
       const medList = enabledMeds
         .map((p, i) => {
-          // Get current times for this medication from schedule
+          // Get scheduled times for this medication
           const medTimes = user.medicationSchedule
             .filter((item) => item.prescriptionName === p.name)
-            .map((item) => moment(item.scheduledTime).format("h:mm A"));
+            .map((item) =>
+              moment(item.scheduledTime).tz(timezone).format("h:mm A")
+            );
 
-          // Get unique times
           const uniqueTimes = [...new Set(medTimes)];
 
           return `${i + 1}. ${p.name} (Current times: ${
-            uniqueTimes.join(", ") || "not set"
+            uniqueTimes.length > 0 ? uniqueTimes.join(", ") : "not set"
           })`;
         })
         .join("\n");
 
-      reply = `Which pill would you like to set a custom time for?\nReply with a number:\n${medList}\n(Type the number of the pill you want to change.)`;
+      reply =
+        `Which pill would you like to set a custom time for?\n` +
+        `Reply with a number:\n${medList}\n` +
+        `(Type the number of the pill you want to change.)`;
+
       user.flowStep = "set_time_select_med";
-      user.temp = {}; // Clear previous temp data
-      await user.save(); // Save immediately after setting flowStep
+      user.temp = {}; // Clear any previous temp
+      await user.save(); // Save user with flow step
       handled = true;
     }
   }
-
   if (!handled && lowerMsg === "pause") {
     user.status = "paused";
     user.tracking.optOutDate = now;
