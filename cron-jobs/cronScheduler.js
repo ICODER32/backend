@@ -40,8 +40,9 @@ export function startReminderCron() {
 
             const scheduledTime = moment(schedule.scheduledTime);
             const timeDiff = Math.abs(scheduledTime.diff(now, "minutes"));
-            if (timeDiff > 10) return false;
+            if (timeDiff > 2) return false;
 
+            // Avoid sending new reminder if a pending one exists
             if (hasPendingNotification(schedule.prescriptionName)) return false;
 
             return true;
@@ -49,6 +50,7 @@ export function startReminderCron() {
 
           if (dueReminders.length === 0) continue;
 
+          // Group by prescription name with times
           const medicationsMap = {};
           dueReminders.forEach((reminder) => {
             const timeStr = moment(reminder.scheduledTime).format("h:mm a");
@@ -58,7 +60,9 @@ export function startReminderCron() {
             medicationsMap[reminder.prescriptionName].add(timeStr);
           });
 
-          let message = `CareTrackRX Reminder\n\n💊 It’s time to take your medications:\n`;
+          // Create formatted medication list
+          let message = `CareTrackRX Reminder\n\n" +
+          💊 It’s time to take your medications:\n"`;
           for (const [medication, times] of Object.entries(medicationsMap)) {
             const sortedTimes = [...times].sort((a, b) =>
               moment(a, "h:mm a").diff(moment(b, "h:mm a"))
@@ -67,6 +71,7 @@ export function startReminderCron() {
           }
           message += `\n\nPlease reply:\nD – if you have taken them\nS – if you need to skip this dose\n\nThank you for using CareTrackRX.`;
 
+          // Send message
           await client.messages.create({
             body: message,
             from: process.env.TWILIO_PHONE_NUMBER,
@@ -75,10 +80,12 @@ export function startReminderCron() {
 
           console.log(message);
 
+          // Mark these reminders as sent
           for (const reminder of dueReminders) {
             reminder.reminderSent = true;
           }
 
+          // Update user tracking and history
           const uniqueMeds = Object.keys(medicationsMap);
           user.tracking.lastReminderSent = now.toDate();
           user.notificationHistory.push({
@@ -179,28 +186,6 @@ export function startReminderFollowupCron() {
       });
 
       for (const user of users) {
-        // ✅ Deduplicate pending notifications by medication list
-        const reversed = [...user.notificationHistory].reverse(); // prefer latest
-        const seen = new Set();
-        const deduped = [];
-
-        for (const n of reversed) {
-          if (n.status !== "pending") {
-            deduped.push(n);
-            continue;
-          }
-
-          const key = JSON.stringify([...n.medications].sort());
-          if (!seen.has(key)) {
-            seen.add(key);
-            deduped.push(n);
-          } else {
-            console.log(`🗑️ Duplicate removed for ${user.phoneNumber}: ${key}`);
-          }
-        }
-
-        user.notificationHistory = deduped.reverse(); // restore original order
-
         const pendingNotifications = user.notificationHistory.filter(
           (n) => n.status === "pending"
         );
