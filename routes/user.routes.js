@@ -516,38 +516,37 @@ router.post("/sms/reply", async (req, res) => {
         } else {
           const selectedMed = enabledMeds[medIndex];
 
-          // SOLUTION: Reassign the entire temp object
+          // Save selected medicine name to temp
           user.temp = {
-            ...user.temp, // Preserve existing temp properties
-            selectedMedName: selectedMed.name, // Add new property
+            ...user.temp,
+            selectedMedName: selectedMed.name,
           };
 
           user.flowStep = "set_time_enter_time";
           await user.save();
-          user.flowStep = "set_time_enter_time";
-          user = await user.save(); // Save immediately after setting flowStep
-          console.log(user.temp);
 
           // Get current times for this medication from schedule
           const medTimes = user.medicationSchedule
             .filter((item) => item.prescriptionName === selectedMed.name)
-            .map((item) => moment(item.scheduledTime).format("h:mm A"));
+            .map((item) => {
+              // Convert to user timezone first, then format
+              return moment
+                .tz(item.scheduledTime, user.timezone || "UTC")
+                .format("h:mm A");
+            });
 
-          // Get unique times and convert each time to 12 hour format
+          // Get unique times
           const uniqueTimes = [...new Set(medTimes)];
+
           const currentTimes = uniqueTimes.length
             ? uniqueTimes.join(", ")
             : "not set";
-          // Prepare reply with current times
-          const timeFormat = uniqueTimes.map((time) =>
-            moment(time, "HH:mm").format("h:mm A")
-          );
 
-          // convert each time to 12 hour format
-          reply = `You have ${selectedMed.name} at ${timeFormat}. Reply with new time(s) in 12-hour format (e.g., 7am or 8:30pm). For multiple times, separate with commas.`;
+          reply = `You currently take *${selectedMed.name}* at: ${currentTimes}\n\nPlease reply with new time(s) in 12-hour format (e.g., 7am or 8:30pm).\n\nFor multiple times, separate with commas.`;
+
+          handled = true;
         }
         break;
-
       case "set_time_enter_time":
         // Check if we have the selected medication name
         console.log("selected meds", user.temp, user.temp.selectedMedName);
