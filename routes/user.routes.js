@@ -9,7 +9,7 @@ import {
 import cron from "node-cron";
 import moment from "moment";
 import { DateTime } from "luxon";
-import moment from "moment-timezone";
+import momentimzone from "moment-timezone";
 
 configDotenv();
 const router = express.Router();
@@ -253,7 +253,7 @@ router.post("/sms/reply", async (req, res) => {
           const medTimes = user.medicationSchedule
             .filter((item) => item.prescriptionName === p.name)
             .map((item) =>
-              moment(item.scheduledTime).tz(timezone).format("h:mm A")
+              momentimzone(item.scheduledTime).tz(timezone).format("h:mm A")
             );
 
           const uniqueTimes = [...new Set(medTimes)];
