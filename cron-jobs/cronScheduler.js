@@ -27,16 +27,28 @@ export function startReminderCron() {
 
       for (const user of activeUsers) {
         try {
+          const hasPendingNotification = (prescriptionName) =>
+            user.notificationHistory.some(
+              (n) =>
+                n.status === "pending" &&
+                n.medications.includes(prescriptionName)
+            );
+
           const dueReminders = user.medicationSchedule.filter((schedule) => {
             if (schedule.status !== "pending") return false;
+            if (schedule.reminderSent) return false;
+
             const scheduledTime = moment(schedule.scheduledTime);
             const timeDiff = Math.abs(scheduledTime.diff(now, "minutes"));
-            return timeDiff <= 10;
+            if (timeDiff > 10) return false;
+
+            if (hasPendingNotification(schedule.prescriptionName)) return false;
+
+            return true;
           });
 
           if (dueReminders.length === 0) continue;
 
-          // Group by prescription name with times
           const medicationsMap = {};
           dueReminders.forEach((reminder) => {
             const timeStr = moment(reminder.scheduledTime).format("h:mm a");
@@ -46,49 +58,29 @@ export function startReminderCron() {
             medicationsMap[reminder.prescriptionName].add(timeStr);
           });
 
-          // Check if we recently sent a reminder
-          const lastReminder = user.tracking.lastReminderSent
-            ? moment(user.tracking.lastReminderSent)
-            : moment(0);
-          const minutesSinceLast = now.diff(lastReminder, "minutes");
-
-          if (minutesSinceLast < 15) {
-            console.log(
-              `⏭ Skipping ${user.phoneNumber} (recent reminder sent)`
-            );
-            continue;
-          }
-
-          // Create formatted medication list
-          let message = "💊 It’s time to take your medications:\n";
+          let message = `CareTrackRX Reminder\n\n💊 It’s time to take your medications:\n`;
           for (const [medication, times] of Object.entries(medicationsMap)) {
             const sortedTimes = [...times].sort((a, b) =>
               moment(a, "h:mm a").diff(moment(b, "h:mm a"))
             );
             message += `\n• ${medication}: ${sortedTimes.join(", ")}`;
           }
-          message += `Please reply:
-               \n D – if you have taken them
-               \n S – if you need to skip this dose
-               \n Thank you for using CareTrackRX.`;
-          console.log(message);
-          // Send message
+          message += `\n\nPlease reply:\nD – if you have taken them\nS – if you need to skip this dose\n\nThank you for using CareTrackRX.`;
+
           await client.messages.create({
             body: message,
             from: process.env.TWILIO_PHONE_NUMBER,
             to: `+${user.phoneNumber}`,
           });
 
-          console.log(
-            `✅ Reminder sent to ${user.phoneNumber} for ${dueReminders.length} medications`
-          );
+          console.log(message);
 
-          // Update user tracking and schedule
-          user.tracking.lastReminderSent = now.toDate();
+          for (const reminder of dueReminders) {
+            reminder.reminderSent = true;
+          }
 
-          // Store unique medication names for follow-up
           const uniqueMeds = Object.keys(medicationsMap);
-
+          user.tracking.lastReminderSent = now.toDate();
           user.notificationHistory.push({
             sentAt: now.toDate(),
             message: `Sent reminder for ${uniqueMeds.length} medications`,
@@ -117,11 +109,9 @@ export function startReminderCron() {
   });
 }
 
-// Modified to only handle skipped medications
 async function notifyCaregivers(user, reminders) {
   if (!user.caregivers || user.caregivers.length === 0) return;
 
-  // Group reminders by prescription
   const prescriptionsMap = {};
   reminders.forEach((reminder) => {
     const prescription = user.prescriptions.find(
@@ -137,13 +127,11 @@ async function notifyCaregivers(user, reminders) {
     }
   });
 
-  // Notify each caregiver
   for (const caregiver of user.caregivers) {
     if (!caregiver.notificationsEnabled) continue;
 
     let medicationsToNotify = [];
 
-    // Find medications this caregiver should be notified about
     caregiver.forPersons.forEach((person) => {
       if (prescriptionsMap[person]) {
         medicationsToNotify = [
@@ -162,8 +150,8 @@ async function notifyCaregivers(user, reminders) {
     try {
       await client.messages.create({
         body: message,
-        from: process.env.TWILIO_PHONE_NUMBER, // Uncomment if using SMS
-        to: `+${caregiver.phoneNumber}`, // Use SMS format if needed
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: `+${caregiver.phoneNumber}`,
       });
       console.log(message);
       console.log(`   👩‍⚕️ Caregiver notified: ${caregiver.phoneNumber}`);
@@ -191,6 +179,28 @@ export function startReminderFollowupCron() {
       });
 
       for (const user of users) {
+        // ✅ Deduplicate pending notifications by medication list
+        const reversed = [...user.notificationHistory].reverse(); // prefer latest
+        const seen = new Set();
+        const deduped = [];
+
+        for (const n of reversed) {
+          if (n.status !== "pending") {
+            deduped.push(n);
+            continue;
+          }
+
+          const key = JSON.stringify([...n.medications].sort());
+          if (!seen.has(key)) {
+            seen.add(key);
+            deduped.push(n);
+          } else {
+            console.log(`🗑️ Duplicate removed for ${user.phoneNumber}: ${key}`);
+          }
+        }
+
+        user.notificationHistory = deduped.reverse(); // restore original order
+
         const pendingNotifications = user.notificationHistory.filter(
           (n) => n.status === "pending"
         );
@@ -222,6 +232,7 @@ export function startReminderFollowupCron() {
     }
   });
 }
+
 async function sendFollowupReminder(user, notification, resendCount) {
   try {
     const medList = notification.medications.join(", ");
@@ -233,9 +244,7 @@ async function sendFollowupReminder(user, notification, resendCount) {
       to: `+${user.phoneNumber}`,
     });
 
-    console.log(
-      `📨 Follow-up sent to ${user.phoneNumber} (resend ${resendCount})`
-    );
+    console.log(message);
 
     notification.resends = resendCount;
   } catch (error) {

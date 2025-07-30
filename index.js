@@ -7,6 +7,7 @@ import loginRoutes from "./routes/login.routes.js";
 import careGiverRoutes from "./routes/careGivers.routes.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

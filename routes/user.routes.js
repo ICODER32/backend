@@ -106,7 +106,28 @@ router.post("/sms/reply", async (req, res) => {
       .sort((a, b) => b.sentAt - a.sentAt); // Sort descending by time
 
     if (pendingNotifications.length === 0) {
-      reply = "You don't have any pending medications to confirm.";
+      // Check for the most recent missed notification
+      const missedNotifications = user.notificationHistory
+        .filter((n) => n.status === "skipped")
+        .sort((a, b) => b.sentAt - a.sentAt);
+
+      if (missedNotifications.length > 0) {
+        const lastMissed = missedNotifications[0];
+        const missedMeds = lastMissed.medications.join(", ");
+        const missedTime = new Date(lastMissed.sentAt).toLocaleTimeString(
+          "en-US",
+          {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+          }
+        );
+
+        reply = `You don't have any pending medications to confirm.\nYour ${missedMeds} dose at ${missedTime} was already marked as missed.`;
+      } else {
+        reply = "You don't have any pending medications to confirm.";
+      }
+
       handled = true;
     } else {
       const mostRecentNotification = pendingNotifications[0];
@@ -117,7 +138,6 @@ router.post("/sms/reply", async (req, res) => {
 
       // Find and update corresponding schedule items
       medications.forEach((medName) => {
-        // Find the earliest pending schedule item for this medication
         const scheduleItem = user.medicationSchedule
           .filter(
             (item) =>
@@ -137,7 +157,6 @@ router.post("/sms/reply", async (req, res) => {
           if (prescription) {
             prescription.tracking.pillCount -= prescription.dosage;
             prescription.tracking.dailyConsumption += prescription.dosage;
-            // Prevent negative pill count
             if (prescription.tracking.pillCount < 0) {
               prescription.tracking.pillCount = 0;
             }
