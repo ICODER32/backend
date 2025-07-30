@@ -244,16 +244,17 @@ router.post("/sms/reply", async (req, res) => {
       reply = "You don't have any active medications. Enable reminders first.";
       handled = true;
     } else {
-      const timezoneOffset = user.timezoneOffset || 0; // ⏰ Offset in minutes, e.g. +300 for PKT
+      // Use the stored timezone (e.g. "Asia/Karachi") or fallback to UTC
+      const userTimezone = user.timezone || "UTC";
+      console.log(userTimezone);
 
       const medList = enabledMeds
         .map((p, i) => {
           const medTimes = user.medicationSchedule
             .filter((item) => item.prescriptionName === p.name)
             .map((item) =>
-              moment
-                .utc(item.scheduledTime) // parse in UTC
-                .utcOffset(timezoneOffset) // shift to user's offset
+              moment(item.scheduledTime)
+                .tz(userTimezone) // Convert to user's specific timezone
                 .format("h:mm A")
             );
 
