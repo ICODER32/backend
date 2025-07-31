@@ -152,6 +152,7 @@ const formatTime = (totalMinutes) => {
 export const generateMedicationSchedule = (
   reminders,
   timezone,
+  existingSchedule = [],
   startDate = new Date()
 ) => {
   const now = DateTime.now().setZone(timezone);
@@ -163,6 +164,15 @@ export const generateMedicationSchedule = (
     acc[r.prescriptionName].push(r);
     return acc;
   }, {});
+
+  // Create a map of existing schedule items by time and prescription
+  const existingMap = new Map();
+  existingSchedule.forEach((item) => {
+    const key = `${item.prescriptionName}-${DateTime.fromISO(
+      item.scheduledTime
+    ).toISO()}`;
+    existingMap.set(key, item);
+  });
 
   Object.entries(groupedByPrescription).forEach(
     ([prescriptionName, reminderArray]) => {
@@ -185,13 +195,13 @@ export const generateMedicationSchedule = (
             millisecond: 0,
           });
 
-          // Check if this schedule item already exists
-          const existingItem = schedule.find(
-            (item) =>
-              item.prescriptionName === prescriptionName &&
-              DateTime.fromISO(item.scheduledTime).toMillis() ===
-                scheduledTime.toMillis()
-          );
+          // Skip today's doses that are already past
+          if (day === 0 && scheduledTime < now) {
+            return;
+          }
+
+          const key = `${prescriptionName}-${scheduledTime.toISO()}`;
+          const existingItem = existingMap.get(key);
 
           if (existingItem) {
             // Preserve existing status
@@ -200,7 +210,7 @@ export const generateMedicationSchedule = (
               scheduledTime: scheduledTime.toISO(),
             });
           } else {
-            // Create new item with pending status
+            // Create new pending item
             schedule.push({
               prescriptionName,
               scheduledTime: scheduledTime.toISO(),
