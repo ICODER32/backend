@@ -517,117 +517,11 @@ router.post("/sms/reply", async (req, res) => {
             ? uniqueTimes.join(", ")
             : "not set";
 
-          reply = `You currently take *${selectedMed.name}* at: ${currentTimes}\n\nPlease reply with new time(s) in 12-hour format (e.g., 7am or 8:30pm).\n\nFor multiple times, separate with commas. e.g (7:00am,10:00pm)`;
+          reply = `You currently take *${selectedMed.name}* at: ${currentTimes}\n\nPlease reply with new time(s) in 12-hour format (e.g., 7am or 8:30pm).\n\nFor multiple times, separate with commas.`;
           handled = true;
         }
         break;
-      case "set_time_enter_time":
-        if (!user.temp?.selectedMedName) {
-          reply = "Something went wrong. Please start over.";
-          user.flowStep = "done";
-          break;
-        }
 
-        const prescription = user.prescriptions.find(
-          (p) => p.name === user.temp.selectedMedName
-        );
-
-        if (!prescription) {
-          reply = "Medication not found. Please try again.";
-          user.flowStep = "done";
-          break;
-        }
-
-        const timeInputs = msg.split(",").map((t) => t.trim());
-        const validTimes = [];
-        const invalidTimes = [];
-
-        // Parse and validate each time
-        for (const timeInput of timeInputs) {
-          const time24 = parseTime(timeInput);
-          if (time24) {
-            validTimes.push(time24);
-          } else {
-            invalidTimes.push(timeInput);
-          }
-        }
-
-        if (validTimes.length === 0) {
-          reply =
-            "No valid times entered. Please use formats like 7am or 8:30pm.";
-        } else {
-          // Recalculate schedule with new times
-          const allEnabledMeds = user.prescriptions.filter(
-            (p) => p.remindersEnabled
-          );
-
-          const allReminders = allEnabledMeds.flatMap((p) => {
-            if (p.name === prescription.name) {
-              // Use new times for this medication
-              return validTimes.map((time) => ({
-                time,
-                prescriptionName: p.name,
-                pillCount: p.tracking.pillCount,
-                dosage: p.dosage,
-              }));
-            } else {
-              // Use existing times for other medications
-              const medTimes = user.medicationSchedule
-                .filter((item) => item.prescriptionName === p.name)
-                .map((item) => moment(item.scheduledTime).format("HH:mm"));
-
-              const uniqueTimes = [...new Set(medTimes)];
-              return uniqueTimes.map((time) => ({
-                time,
-                prescriptionName: p.name,
-                pillCount: p.tracking.pillCount,
-                dosage: p.dosage,
-              }));
-            }
-          });
-
-          const uniqueReminders = Array.from(
-            new Map(
-              allReminders.map((r) => [`${r.prescriptionName}-${r.time}`, r])
-            ).values()
-          );
-
-          uniqueReminders.sort(
-            (a, b) => moment(a.time, "HH:mm") - moment(b.time, "HH:mm")
-          );
-
-          user.reminderTimes = uniqueReminders.map((r) => r.time);
-
-          // Pass existing schedule to preserve statuses
-          user.medicationSchedule = generateMedicationSchedule(
-            uniqueReminders,
-            user.timezone,
-            user.medicationSchedule // Pass existing schedule
-          );
-
-          user.flowStep = "done";
-          user.temp = {};
-
-          // Format times in user's timezone for display
-          const formattedTimes = validTimes.map((timeStr) => {
-            const [hours, minutes] = timeStr.split(":");
-            const hour = parseInt(hours, 10);
-            const period = hour >= 12 ? "PM" : "AM";
-            const hour12 = hour % 12 || 12;
-            return `${hour12}:${minutes} ${period}`;
-          });
-
-          reply = `Times updated for ${
-            prescription.name
-          }! New times: ${formattedTimes.join(", ")}.`;
-
-          if (invalidTimes.length > 0) {
-            reply += `\nNote: These times were invalid: ${invalidTimes.join(
-              ", "
-            )}`;
-          }
-        }
-        break;
       default:
         reply = "Sorry, I didn't understand you. need help, text H.";
     }
