@@ -70,6 +70,8 @@ router.post("/sms/reply", async (req, res) => {
     IL: "America/Chicago",
     NJ: "America/New_York",
     GA: "America/New_York",
+    // FLORIDA
+    FL: "America/New_York",
   };
   if (req.body.FromState && stateTimezones[req.body.FromState]) {
     user.timezone = stateTimezones[req.body.FromState];
