@@ -521,7 +521,121 @@ router.post("/sms/reply", async (req, res) => {
           handled = true;
         }
         break;
+      case "set_time_enter_time":
+        if (!user.temp?.selectedMedName) {
+          reply = "Something went wrong. Please start over.";
+          user.flowStep = "done";
+          break;
+        }
 
+        const prescription = user.prescriptions.find(
+          (p) => p.name === user.temp.selectedMedName
+        );
+
+        if (!prescription) {
+          reply = "Medication not found. Please try again.";
+          user.flowStep = "done";
+          break;
+        }
+
+        const timeInputs = msg.split(",").map((t) => t.trim());
+        const validTimes = [];
+        const invalidTimes = [];
+
+        // Parse and validate each time
+        for (const timeInput of timeInputs) {
+          const time24 = parseTime(timeInput);
+          if (time24) {
+            validTimes.push(time24);
+          } else {
+            invalidTimes.push(timeInput);
+          }
+        }
+
+        if (validTimes.length === 0) {
+          reply =
+            "No valid times entered. Please use formats like 7am or 8:30pm.";
+        } else {
+          // Update ONLY the selected prescription's times
+          const enabledMeds = user.prescriptions.filter(
+            (p) => p.remindersEnabled
+          );
+
+          // Create new reminders array with updated times for selected med
+          const allReminders = enabledMeds.flatMap((p) => {
+            if (p.name === prescription.name) {
+              // Use new times for this medication
+              return validTimes.map((time) => ({
+                time,
+                prescriptionName: p.name,
+                pillCount: p.tracking.pillCount,
+                dosage: p.dosage,
+              }));
+            } else {
+              // Use existing schedule times for other medications
+              const medSchedule = user.medicationSchedule.filter(
+                (item) => item.prescriptionName === p.name
+              );
+
+              // Get distinct times from schedule
+              const distinctTimes = [
+                ...new Set(
+                  medSchedule.map((item) =>
+                    moment(item.scheduledTime).tz(user.timezone).format("HH:mm")
+                  )
+                ),
+              ];
+
+              return distinctTimes.map((time) => ({
+                time,
+                prescriptionName: p.name,
+                pillCount: p.tracking.pillCount,
+                dosage: p.dosage,
+              }));
+            }
+          });
+
+          const uniqueReminders = Array.from(
+            new Map(
+              allReminders.map((r) => [`${r.prescriptionName}-${r.time}`, r])
+            ).values()
+          );
+
+          uniqueReminders.sort(
+            (a, b) => moment(a.time, "HH:mm") - moment(b.time, "HH:mm")
+          );
+
+          user.reminderTimes = uniqueReminders.map((r) => r.time);
+
+          // Regenerate schedule for ALL medications with updated times
+          user.medicationSchedule = generateMedicationSchedule(
+            uniqueReminders,
+            user.timezone
+          );
+
+          user.flowStep = "done";
+          user.temp = {};
+
+          // Format times in user's timezone for display
+          const formattedTimes = validTimes.map((timeStr) => {
+            const [hours, minutes] = timeStr.split(":");
+            const hour = parseInt(hours, 10);
+            const period = hour >= 12 ? "PM" : "AM";
+            const hour12 = hour % 12 || 12;
+            return `${hour12}:${minutes} ${period}`;
+          });
+
+          reply = `Times updated for ${
+            prescription.name
+          }! New times: ${formattedTimes.join(", ")}.`;
+
+          if (invalidTimes.length > 0) {
+            reply += `\nNote: These times were invalid: ${invalidTimes.join(
+              ", "
+            )}`;
+          }
+        }
+        break;
       default:
         reply = "Sorry, I didn't understand you. need help, text H.";
     }
