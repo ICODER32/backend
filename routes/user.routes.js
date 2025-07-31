@@ -58,33 +58,23 @@ router.post("/sms/reply", async (req, res) => {
     user.temp = {};
   }
   // UPDATE TIME ZONE
-  if (req.body.FromState == "CA") {
-    user.timezone = "America/Los_Angeles";
-  } else if (req.body.FromState == "NY") {
-    user.timezone = "America/New_York";
-  } else if (req.body.FromState == "TX") {
-    user.timezone = "America/Chicago";
-  } else if (req.body.FromState == "FL") {
-    user.timezone = "America/New_York";
-  }
-  // Michigan
-  else if (req.body.FromState == "MI") {
-    user.timezone = "America/New_York";
-  } else if (req.body.FromState == "WA") {
-    user.timezone = "America/Los_Angeles";
-  } else if (req.body.FromState == "OH") {
-    user.timezone = "America/New_York";
-  } else if (req.body.FromState == "PA") {
-    user.timezone = "America/New_York";
-  } else if (req.body.FromState == "IL") {
-    user.timezone = "America/Chicago";
-  } else if (req.body.FromState == "NJ") {
-    user.timezone = "America/New_York";
-  } else if (req.body.FromState == "GA") {
-    user.timezone = "America/New_York";
+  const stateTimezones = {
+    CA: "America/Los_Angeles",
+    NY: "America/New_York",
+    TX: "America/Chicago",
+    FL: "America/New_York",
+    MI: "America/New_York",
+    WA: "America/Los_Angeles",
+    OH: "America/New_York",
+    PA: "America/New_York",
+    IL: "America/Chicago",
+    NJ: "America/New_York",
+    GA: "America/New_York",
+  };
+  if (req.body.FromState && stateTimezones[req.body.FromState]) {
+    user.timezone = stateTimezones[req.body.FromState];
   } else {
-    // islamabad pakistan
-    user.timezone = "Asia/Karachi";
+    user.timezone = "Asia/Karachi"; // Default
   }
 
   await user.save(); // Save timezone change
@@ -245,22 +235,16 @@ router.post("/sms/reply", async (req, res) => {
       reply = "You don't have any active medications. Enable reminders first.";
       handled = true;
     } else {
-      // Use the stored timezone (e.g. "Asia/Karachi") or fallback to UTC
       const userTimezone = user.timezone || "UTC";
-      console.log(userTimezone);
-
       const medList = enabledMeds
         .map((p, i) => {
           const medTimes = user.medicationSchedule
             .filter((item) => item.prescriptionName === p.name)
             .map((item) =>
-              momenttimezone(item.scheduledTime)
-                .tz(userTimezone) // Convert to user's specific timezone
-                .format("h:mm A")
+              moment(item.scheduledTime).tz(userTimezone).format("h:mm A")
             );
 
           const uniqueTimes = [...new Set(medTimes)];
-
           return `${i + 1}. ${p.name} (Current times: ${
             uniqueTimes.join(", ") || "not set"
           })`;
@@ -502,7 +486,6 @@ router.post("/sms/reply", async (req, res) => {
           reply = "Please enter a valid night time (e.g., 10 PM)";
         }
         break;
-
       case "set_time_select_med":
         const medIndex = parseInt(msg) - 1;
         const enabledMeds = user.prescriptions.filter(
@@ -515,48 +498,36 @@ router.post("/sms/reply", async (req, res) => {
           reply = "Invalid selection. Please choose a number from the list.";
         } else {
           const selectedMed = enabledMeds[medIndex];
-
-          // Save selected medicine name to temp
           user.temp = {
             ...user.temp,
             selectedMedName: selectedMed.name,
           };
-
           user.flowStep = "set_time_enter_time";
           await user.save();
 
-          // Get current times for this medication from schedule
+          // Get current times in user's timezone
           const medTimes = user.medicationSchedule
             .filter((item) => item.prescriptionName === selectedMed.name)
-            .map((item) => {
-              // Convert to user timezone first, then format
-              return moment
-                .tz(item.scheduledTime, user.timezone || "UTC")
-                .format("h:mm A");
-            });
+            .map((item) =>
+              moment(item.scheduledTime).tz(user.timezone).format("h:mm A")
+            );
 
-          // Get unique times
           const uniqueTimes = [...new Set(medTimes)];
-
           const currentTimes = uniqueTimes.length
             ? uniqueTimes.join(", ")
             : "not set";
 
           reply = `You currently take *${selectedMed.name}* at: ${currentTimes}\n\nPlease reply with new time(s) in 12-hour format (e.g., 7am or 8:30pm).\n\nFor multiple times, separate with commas.`;
-
           handled = true;
         }
         break;
       case "set_time_enter_time":
-        // Check if we have the selected medication name
-        console.log("selected meds", user.temp, user.temp.selectedMedName);
-        if (!user.temp || !user.temp.selectedMedName) {
+        if (!user.temp?.selectedMedName) {
           reply = "Something went wrong. Please start over.";
           user.flowStep = "done";
           break;
         }
 
-        // Find medication by name
         const prescription = user.prescriptions.find(
           (p) => p.name === user.temp.selectedMedName
         );
@@ -567,27 +538,15 @@ router.post("/sms/reply", async (req, res) => {
           break;
         }
 
-        // Process time input
         const timeInputs = msg.split(",").map((t) => t.trim());
         const validTimes = [];
         const invalidTimes = [];
 
-        const today = moment().format("YYYY-MM-DD");
-
+        // Parse and validate each time
         for (const timeInput of timeInputs) {
-          if (validateTimeAny(timeInput)) {
-            // Parse into moment object using timezone
-            const parsed = moment.tz(
-              `${today} ${timeInput}`,
-              "YYYY-MM-DD hh:mma",
-              user.timezone || "Asia/Karachi"
-            );
-
-            if (parsed.isValid()) {
-              validTimes.push(parsed.format("HH:mm")); // store just the time
-            } else {
-              invalidTimes.push(timeInput);
-            }
+          const time24 = parseTime(timeInput);
+          if (time24) {
+            validTimes.push(time24);
           } else {
             invalidTimes.push(timeInput);
           }
@@ -601,6 +560,7 @@ router.post("/sms/reply", async (req, res) => {
           const allEnabledMeds = user.prescriptions.filter(
             (p) => p.remindersEnabled
           );
+
           const allReminders = allEnabledMeds.flatMap((p) => {
             if (p.name === prescription.name) {
               // Use new times for this medication
@@ -617,7 +577,6 @@ router.post("/sms/reply", async (req, res) => {
                 .map((item) => moment(item.scheduledTime).format("HH:mm"));
 
               const uniqueTimes = [...new Set(medTimes)];
-
               return uniqueTimes.map((time) => ({
                 time,
                 prescriptionName: p.name,
@@ -643,13 +602,20 @@ router.post("/sms/reply", async (req, res) => {
             user.timezone
           );
           user.flowStep = "done";
-          user.temp = {}; // Clear temp data
-          // reply with usertimezone time
+          user.temp = {};
+
+          // Format times in user's timezone for display
+          const formattedTimes = validTimes.map((timeStr) => {
+            const [hours, minutes] = timeStr.split(":");
+            const hour = parseInt(hours, 10);
+            const period = hour >= 12 ? "PM" : "AM";
+            const hour12 = hour % 12 || 12;
+            return `${hour12}:${minutes} ${period}`;
+          });
+
           reply = `Times updated for ${
             prescription.name
-          }! New times: ${momenttimezone
-            .tz(validTimes, user.timezone || "Asia/Karachi")
-            .format("h:mm A")}.`;
+          }! New times: ${formattedTimes.join(", ")}.`;
 
           if (invalidTimes.length > 0) {
             reply += `\nNote: These times were invalid: ${invalidTimes.join(
@@ -658,7 +624,6 @@ router.post("/sms/reply", async (req, res) => {
           }
         }
         break;
-
       default:
         reply = "Sorry, I didn't understand you. need help, text H.";
     }
