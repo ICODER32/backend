@@ -556,12 +556,13 @@ router.post("/sms/reply", async (req, res) => {
           reply =
             "No valid times entered. Please use formats like 7am or 8:30pm.";
         } else {
-          // Recalculate schedule with new times
-          const allEnabledMeds = user.prescriptions.filter(
+          // Update ONLY the selected prescription's times
+          const enabledMeds = user.prescriptions.filter(
             (p) => p.remindersEnabled
           );
 
-          const allReminders = allEnabledMeds.flatMap((p) => {
+          // Create new reminders array with updated times for selected med
+          const allReminders = enabledMeds.flatMap((p) => {
             if (p.name === prescription.name) {
               // Use new times for this medication
               return validTimes.map((time) => ({
@@ -571,13 +572,21 @@ router.post("/sms/reply", async (req, res) => {
                 dosage: p.dosage,
               }));
             } else {
-              // Use existing times for other medications
-              const medTimes = user.medicationSchedule
-                .filter((item) => item.prescriptionName === p.name)
-                .map((item) => moment(item.scheduledTime).format("HH:mm"));
+              // Use existing schedule times for other medications
+              const medSchedule = user.medicationSchedule.filter(
+                (item) => item.prescriptionName === p.name
+              );
 
-              const uniqueTimes = [...new Set(medTimes)];
-              return uniqueTimes.map((time) => ({
+              // Get distinct times from schedule
+              const distinctTimes = [
+                ...new Set(
+                  medSchedule.map((item) =>
+                    moment(item.scheduledTime).tz(user.timezone).format("HH:mm")
+                  )
+                ),
+              ];
+
+              return distinctTimes.map((time) => ({
                 time,
                 prescriptionName: p.name,
                 pillCount: p.tracking.pillCount,
@@ -597,10 +606,13 @@ router.post("/sms/reply", async (req, res) => {
           );
 
           user.reminderTimes = uniqueReminders.map((r) => r.time);
+
+          // Regenerate schedule for ALL medications with updated times
           user.medicationSchedule = generateMedicationSchedule(
             uniqueReminders,
             user.timezone
           );
+
           user.flowStep = "done";
           user.temp = {};
 
