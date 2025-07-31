@@ -644,10 +644,12 @@ router.post("/sms/reply", async (req, res) => {
           );
           user.flowStep = "done";
           user.temp = {}; // Clear temp data
-
+          // reply with usertimezone time
           reply = `Times updated for ${
             prescription.name
-          }! New times: ${validTimes.join(", ")}.`;
+          }! New times: ${momenttimezone
+            .tz(validTimes, user.timezone || "Asia/Karachi")
+            .format("h:mm A")}.`;
 
           if (invalidTimes.length > 0) {
             reply += `\nNote: These times were invalid: ${invalidTimes.join(
