@@ -517,7 +517,7 @@ router.post("/sms/reply", async (req, res) => {
             ? uniqueTimes.join(", ")
             : "not set";
 
-          reply = `You currently take *${selectedMed.name}* at: ${currentTimes}\n\nPlease reply with new time(s) in 12-hour format (e.g., 7am or 8:30pm).\n\nFor multiple times, separate with commas.`;
+          reply = `You currently take *${selectedMed.name}* at: ${currentTimes}\n\nPlease reply with new time(s) in 12-hour format (e.g., 7am or 8:30pm).\n\nFor multiple times, separate with commas. e.g (7:00am,10:00pm)`;
           handled = true;
         }
         break;
