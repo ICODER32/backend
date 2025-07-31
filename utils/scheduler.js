@@ -185,18 +185,30 @@ export const generateMedicationSchedule = (
             millisecond: 0,
           });
 
-          // ✅ Skip today’s doses that are already past
-          if (day === 0 && scheduledTime < now) {
-            return; // skip this dose today
-          }
+          // Check if this schedule item already exists
+          const existingItem = schedule.find(
+            (item) =>
+              item.prescriptionName === prescriptionName &&
+              DateTime.fromISO(item.scheduledTime).toMillis() ===
+                scheduledTime.toMillis()
+          );
 
-          schedule.push({
-            prescriptionName,
-            scheduledTime: scheduledTime.toISO(),
-            localTime: scheduledTime.toLocaleString(DateTime.DATETIME_MED),
-            dosage: r.dosage,
-            status: "pending",
-          });
+          if (existingItem) {
+            // Preserve existing status
+            schedule.push({
+              ...existingItem,
+              scheduledTime: scheduledTime.toISO(),
+            });
+          } else {
+            // Create new item with pending status
+            schedule.push({
+              prescriptionName,
+              scheduledTime: scheduledTime.toISO(),
+              localTime: scheduledTime.toLocaleString(DateTime.DATETIME_MED),
+              dosage: r.dosage,
+              status: "pending",
+            });
+          }
         });
       }
     }
