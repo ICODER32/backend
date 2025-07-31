@@ -91,7 +91,7 @@ router.post("/sms/reply", async (req, res) => {
     handled = true;
   }
 
-  if (!handled && lowerMsg === "d") {
+  if (lowerMsg === "d") {
     // Find the most recent pending notification
     const pendingNotifications = user.notificationHistory
       .filter((n) => n.status === "pending")
@@ -203,7 +203,7 @@ router.post("/sms/reply", async (req, res) => {
     }
   }
 
-  if (!handled && lowerMsg === "stop") {
+  if (lowerMsg === "stop") {
     user.status = "inactive";
     user.notificationsEnabled = false;
     user.prescriptions.forEach((p) => {

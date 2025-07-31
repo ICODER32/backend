@@ -71,31 +71,32 @@ export const calculateReminderTimes = (
   if (frequency === 2) {
     let firstDose, secondDose;
 
-    if (isBeforeBed) {
-      // Second dose before bed, first dose at midpoint
-      secondDose = sleepTotalMin - 60;
-      firstDose = wakeTotalMin + Math.floor((secondDose - wakeTotalMin) / 2);
-    } else if (isWithBreakfast) {
-      // First dose with breakfast, second dose at midpoint
-      firstDose = wakeTotalMin + 60;
-      secondDose = firstDose + Math.floor((sleepTotalMin - firstDose) / 2);
+    if (isBeforeBed || isWithBreakfast) {
+      // New behavior: breakfast + bedtime (skip noon)
+      firstDose = wakeTotalMin + 60; // Breakfast
+      secondDose = sleepTotalMin - 60; // Bedtime
     } else if (normalizedInstructions.includes("dinner")) {
-      // First with breakfast, second with dinner
+      // Existing dinner behavior
       firstDose = wakeTotalMin + 60;
       secondDose = sleepTotalMin - 60;
     } else {
-      // Default: breakfast and dinner times
+      // Default behavior
       firstDose = wakeTotalMin + 60;
       secondDose = sleepTotalMin - 60;
     }
 
-    [firstDose, secondDose].forEach((dose) => {
-      times.push({
-        prescriptionName: name,
-        time: formatTime(dose),
-        dosage,
-        pillCount,
-      });
+    // Add both doses to schedule
+    times.push({
+      prescriptionName: name,
+      time: formatTime(firstDose),
+      dosage,
+      pillCount,
+    });
+    times.push({
+      prescriptionName: name,
+      time: formatTime(secondDose),
+      dosage,
+      pillCount,
     });
     return times;
   }
