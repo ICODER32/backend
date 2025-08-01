@@ -64,7 +64,7 @@ router.post("/addPharmacy", async (req, res) => {
     const message = `Welcome to CareTrackRX.
 We’ve received your prescriptions:
 ${medList}
-To set reminders, reply with the number(s).
+To set reminders, reply with the number(s) e.g; 1,2,3 etc.
 Reply STOP to unsubscribe.
 `;
     try {
