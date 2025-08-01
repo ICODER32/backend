@@ -59,19 +59,57 @@ router.post("/sms/reply", async (req, res) => {
   }
   // UPDATE TIME ZONE
   const stateTimezones = {
-    CA: "America/Los_Angeles",
-    NY: "America/New_York",
-    TX: "America/Chicago",
-    FL: "America/New_York",
-    MI: "America/New_York",
-    WA: "America/Los_Angeles",
-    OH: "America/New_York",
-    PA: "America/New_York",
-    IL: "America/Chicago",
-    NJ: "America/New_York",
-    GA: "America/New_York",
-    // FLORIDA
-    FL: "America/New_York",
+    AL: "America/Chicago", // Alabama – Central
+    AK: "America/Anchorage", // Most of Alaska (excluding Aleutian Islands)
+    AZ: "America/Phoenix", // Arizona – no DST except Navajo Nation
+    AR: "America/Chicago", // Arkansas
+    CA: "America/Los_Angeles", // California
+    CO: "America/Denver", // Colorado
+    CT: "America/New_York", // Connecticut
+    DE: "America/New_York", // Delaware
+    DC: "America/New_York", // District of Columbia
+    FL: "America/New_York", // Florida – majority Eastern (some Panhandle in Central)
+    GA: "America/New_York", // Georgia
+    HI: "Pacific/Honolulu", // Hawaii – no DST
+    ID: "America/Boise", // Idaho – mostly Mountain (some Panhandle in Pacific)
+    IL: "America/Chicago", // Illinois
+    IN: "America/Indiana/Indianapolis", // Indiana – Eastern majority (some counties in Central)
+    IA: "America/Chicago", // Iowa
+    KS: "America/Chicago", // Kansas – majority Central (some w. counties in Mountain)
+    KY: "America/New_York", // Kentucky – major Eastern (Western KY in Central)
+    LA: "America/Chicago", // Louisiana
+    ME: "America/New_York", // Maine
+    MD: "America/New_York", // Maryland
+    MA: "America/New_York", // Massachusetts
+    MI: "America/Detroit", // Michigan – majority Eastern (Upper Peninsula western counties in Central)
+    MN: "America/Chicago", // Minnesota
+    MS: "America/Chicago", // Mississippi
+    MO: "America/Chicago", // Missouri
+    MT: "America/Denver", // Montana
+    NE: "America/Chicago", // Nebraska – majority Central (western in Mountain)
+    NV: "America/Los_Angeles", // Nevada – majority Pacific, some in Mountain (e.g., West Wendover)
+    NH: "America/New_York", // New Hampshire
+    NJ: "America/New_York", // New Jersey
+    NM: "America/Denver", // New Mexico
+    NY: "America/New_York", // New York
+    NC: "America/New_York", // North Carolina
+    ND: "America/Chicago", // North Dakota – majority Central (west border counties in Mountain)
+    OH: "America/New_York", // Ohio
+    OK: "America/Chicago", // Oklahoma – almost entirely Central
+    OR: "America/Los_Angeles", // Oregon – majority Pacific (some eastern regions in Mountain)
+    PA: "America/New_York", // Pennsylvania
+    RI: "America/New_York", // Rhode Island
+    SC: "America/New_York", // South Carolina
+    SD: "America/Chicago", // South Dakota – majority Central (western in Mountain)
+    TN: "America/Chicago", // Tennessee – majority Central (East TN in Eastern)
+    TX: "America/Chicago", // Texas – majority Central (West Texas in Mountain)
+    UT: "America/Denver", // Utah
+    VT: "America/New_York", // Vermont
+    VA: "America/New_York", // Virginia
+    WA: "America/Los_Angeles", // Washington state
+    WV: "America/New_York", // West Virginia
+    WI: "America/Chicago", // Wisconsin
+    WY: "America/Denver",
   };
   if (req.body.FromState && stateTimezones[req.body.FromState]) {
     user.timezone = stateTimezones[req.body.FromState];
@@ -930,3 +968,5 @@ router.patch("/update/:id", async (req, res) => {
   }
 });
 export default router;
+
+export { sendMessage };

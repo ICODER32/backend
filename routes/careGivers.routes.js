@@ -1,5 +1,6 @@
 import express from "express";
 import User from "../models/user.model.js";
+import { sendMessage } from "./user.routes.js";
 
 const router = express.Router();
 
@@ -54,6 +55,8 @@ router.post("/", async (req, res) => {
     // Add new caregiver
     user.caregivers.push(caregiver);
     await user.save();
+    const message = `You have been added as a caregiver for ${user.phoneNumber}`;
+    await sendMessage(caregiver.phoneNumber, message);
 
     res.status(201).json({
       success: true,
