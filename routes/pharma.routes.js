@@ -61,11 +61,12 @@ router.post("/addPharmacy", async (req, res) => {
       .join("\n");
 
     // Send initial message
-    const message = `Welcome to CareTrackRX.
-We’ve received your prescriptions:
+    const message = `Welcome to CareTrackRX!
+We've received your prescriptions:
 ${medList}
-To set reminders, reply with the number(s) e.g; 1,2,3 etc.
-Reply STOP to unsubscribe.
+To set up reminders, please reply with the numbers) of the prescriptions you'd like to track.
+(Example: 1, 2, or 1)
+Reply STOP to unsubscribe at any time.
 `;
     try {
       const message1 = await client.messages.create({
