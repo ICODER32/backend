@@ -158,23 +158,21 @@ export const generateMedicationSchedule = (
   const now = DateTime.now().setZone(timezone);
   const schedule = [];
 
-  // Group reminders by prescription name
+  // Group reminders by prescription ID instead of name
   const groupedByPrescription = reminders.reduce((acc, r) => {
-    if (!acc[r.prescriptionName]) acc[r.prescriptionName] = [];
-    acc[r.prescriptionName].push(r);
+    const key = r.prescriptionId || r.prescriptionName;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(r);
     return acc;
   }, {});
 
   Object.entries(groupedByPrescription).forEach(
-    ([prescriptionName, reminderArray]) => {
-      const dailyDosage = reminderArray.reduce((sum, r) => sum + r.dosage, 0);
-      const totalPills = reminderArray[0].pillCount;
-      const totalDays = Math.floor(totalPills / dailyDosage);
-
+    ([prescriptionKey, reminderArray]) => {
       const adjustedStart = DateTime.fromJSDate(startDate).setZone(timezone);
       const today = adjustedStart.startOf("day");
 
-      for (let day = 0; day < totalDays; day++) {
+      // Only generate schedule for next 7 days
+      for (let day = 0; day < 7; day++) {
         const currentDay = today.plus({ days: day });
 
         reminderArray.forEach((r) => {
@@ -186,28 +184,16 @@ export const generateMedicationSchedule = (
             millisecond: 0,
           });
 
-          // Check if this schedule item already exists
-          const existingItem = schedule.find(
-            (item) =>
-              item.prescriptionName === prescriptionName &&
-              DateTime.fromISO(item.scheduledTime).toMillis() ===
-                scheduledTime.toMillis()
-          );
-
-          if (existingItem) {
-            // Preserve existing status
+          // Only create future schedule items
+          if (scheduledTime > now) {
             schedule.push({
-              ...existingItem,
-              scheduledTime: scheduledTime.toISO(),
-            });
-          } else {
-            // Create new item with pending status
-            schedule.push({
-              prescriptionName,
+              prescriptionName: r.prescriptionName,
+              prescriptionId: r.prescriptionId,
               scheduledTime: scheduledTime.toISO(),
               localTime: scheduledTime.toLocaleString(DateTime.DATETIME_MED),
               dosage: r.dosage,
               status: "pending",
+              reminderSent: false,
             });
           }
         });

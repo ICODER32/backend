@@ -179,6 +179,10 @@ const userSchema = new mongoose.Schema({
       },
       prescriptionName: String,
       prescriptionId: mongoose.Schema.Types.ObjectId,
+      remainderSent: {
+        type: Boolean,
+        default: false,
+      },
     },
   ],
   tracking: {

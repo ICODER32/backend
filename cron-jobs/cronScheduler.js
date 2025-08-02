@@ -23,57 +23,38 @@ export function startReminderCron() {
         notificationsEnabled: true,
       });
 
-      console.log(`👥 Found ${activeUsers.length} active users`);
-
       for (const user of activeUsers) {
         try {
           const userTimezone = user.timezone || "UTC";
 
-          const hasPendingNotification = (prescriptionName) =>
-            user.notificationHistory.some(
-              (n) =>
-                n.status === "pending" &&
-                n.medications.includes(prescriptionName)
-            );
-
+          // Find due reminders that haven't been processed
           const dueReminders = user.medicationSchedule.filter((schedule) => {
             if (schedule.status !== "pending") return false;
             if (schedule.reminderSent) return false;
 
             const scheduledTime = moment.utc(schedule.scheduledTime);
             const timeDiff = Math.abs(scheduledTime.diff(now, "minutes"));
-            if (timeDiff > 2) return false;
-
-            if (hasPendingNotification(schedule.prescriptionName)) return false;
-
-            return true;
+            return timeDiff <= 2; // Within 2-minute window
           });
 
           if (dueReminders.length === 0) continue;
 
-          // Group by prescription name with localized time strings
-          const medicationsMap = {};
+          // Create notification with schedule IDs
+          const scheduleIds = dueReminders.map((r) => r._id);
+          const uniqueMeds = [
+            ...new Set(dueReminders.map((r) => r.prescriptionName)),
+          ];
+
+          // Format message
+          let message = `CareTrackRX Reminder\n\n💊 It's time to take:\n`;
           dueReminders.forEach((reminder) => {
             const timeStr = moment
               .utc(reminder.scheduledTime)
               .tz(userTimezone)
               .format("h:mm A");
-
-            if (!medicationsMap[reminder.prescriptionName]) {
-              medicationsMap[reminder.prescriptionName] = new Set();
-            }
-            medicationsMap[reminder.prescriptionName].add(timeStr);
+            message += `\n• ${reminder.prescriptionName} at ${timeStr}`;
           });
-
-          // Create formatted medication list
-          let message = `CareTrackRX Reminder\n\n💊 It’s time to take your medications:\n`;
-          for (const [medication, times] of Object.entries(medicationsMap)) {
-            const sortedTimes = [...times].sort((a, b) =>
-              moment(a, "h:mm A").diff(moment(b, "h:mm A"))
-            );
-            message += `\n• ${medication}: ${sortedTimes.join(", ")}`;
-          }
-          message += `\n\nPlease reply:\nD – if you have taken them\nS – if you need to skip this dose\n\nThank you for using CareTrackRX.`;
+          message += `\n\nReply:\nD - Taken\nS - Skip`;
 
           // Send message
           await client.messages.create({
@@ -82,42 +63,28 @@ export function startReminderCron() {
             to: `+${user.phoneNumber}`,
           });
 
-          console.log(`📤 Sent to ${user.phoneNumber}:\n${message}`);
-
-          // Mark reminders as sent
-          for (const reminder of dueReminders) {
+          // Update flags
+          dueReminders.forEach((reminder) => {
             reminder.reminderSent = true;
-          }
+          });
 
-          // Update user tracking
-          const uniqueMeds = Object.keys(medicationsMap);
-          user.tracking.lastReminderSent = now.toDate();
+          // Add notification with schedule references
           user.notificationHistory.push({
             sentAt: now.toDate(),
-            message: `Sent reminder for ${uniqueMeds.length} medications`,
+            message: `Reminder for ${uniqueMeds.join(", ")}`,
             status: "pending",
             medications: uniqueMeds,
+            scheduleIds, // Crucial: link to schedule items
             resends: 0,
           });
 
           await user.save();
-        } catch (userError) {
-          console.error(`❌ Error processing ${user.phoneNumber}:`, userError);
-          user.notificationHistory.push({
-            sentAt: new Date(),
-            message: "Failed to send reminder",
-            status: "failed",
-            error: userError.message,
-          });
-          await user.save();
+        } catch (error) {
+          console.error(`Error processing ${user.phoneNumber}:`, error);
         }
       }
-
-      console.log(
-        `🏁 Reminder cycle completed at ${now.format("HH:mm:ss")} UTC`
-      );
     } catch (error) {
-      console.error("🚨 Critical error in reminder cycle:", error);
+      console.error("Critical error in reminder cycle:", error);
     }
   });
 }
@@ -246,3 +213,44 @@ async function sendFollowupReminder(user, notification, resendCount) {
     notification.error = error.message;
   }
 }
+// Add to cronScheduler.js
+export function scheduleNightlyRefresh() {
+  cron.schedule("0 3 * * *", async () => {
+    // 3 AM daily
+    const activeUsers = await User.find({ status: "active" });
+
+    for (const user of activeUsers) {
+      const enabledMeds = user.prescriptions.filter((p) => p.remindersEnabled);
+
+      const allReminders = enabledMeds.flatMap((p) =>
+        calculateReminderTimes(
+          user.wakeTime,
+          user.sleepTime,
+          p.instructions,
+          p.timesToTake,
+          p.name,
+          p.tracking.pillCount,
+          p.dosage,
+          p._id
+        )
+      );
+
+      // Preserve completed items
+      const completedItems = user.medicationSchedule.filter(
+        (item) => item.status !== "pending"
+      );
+
+      // Generate new schedule
+      const newSchedule = generateMedicationSchedule(
+        allReminders,
+        user.timezone
+      );
+
+      user.medicationSchedule = [...completedItems, ...newSchedule];
+      await user.save();
+    }
+  });
+}
+
+// Call in index.js
+scheduleNightlyRefresh();
