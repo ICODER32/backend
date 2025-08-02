@@ -53,7 +53,6 @@ router.post("/sms/reply", async (req, res) => {
     );
   }
 
-  // Initialize temp if it doesn't exist
   if (!user.temp) {
     user.temp = {};
   }
@@ -114,10 +113,10 @@ router.post("/sms/reply", async (req, res) => {
   if (req.body.FromState && stateTimezones[req.body.FromState]) {
     user.timezone = stateTimezones[req.body.FromState];
   } else {
-    user.timezone = "Asia/Karachi"; // Default
+    user.timezone = "Asia/Karachi";
   }
 
-  await user.save(); // Save timezone change
+  await user.save();
 
   const lowerMsg = msg.toLowerCase();
   let reply = "";
@@ -132,13 +131,11 @@ router.post("/sms/reply", async (req, res) => {
   }
 
   if (lowerMsg === "d") {
-    // Find the most recent pending notification
     const pendingNotifications = user.notificationHistory
       .filter((n) => n.status === "pending")
-      .sort((a, b) => b.sentAt - a.sentAt); // Sort descending by time
+      .sort((a, b) => b.sentAt - a.sentAt);
 
     if (pendingNotifications.length === 0) {
-      // Check for the most recent missed notification
       const missedNotifications = user.notificationHistory
         .filter((n) => n.status === "skipped")
         .sort((a, b) => b.sentAt - a.sentAt);
@@ -159,33 +156,22 @@ router.post("/sms/reply", async (req, res) => {
       } else {
         reply = "You don't have any pending medications to confirm.";
       }
-
       handled = true;
     } else {
       const mostRecentNotification = pendingNotifications[0];
-      const medications = mostRecentNotification.medications;
-
-      // Update notification status
       mostRecentNotification.status = "taken";
 
-      // Find and update corresponding schedule items
-      medications.forEach((medName) => {
-        const scheduleItem = user.medicationSchedule
-          .filter(
-            (item) =>
-              item.prescriptionName === medName && item.status === "pending"
-          )
-          .sort((a, b) => a.scheduledTime - b.scheduledTime)[0]; // Get earliest
-
-        if (scheduleItem) {
+      // Process all schedule items in this notification
+      for (const scheduleId of mostRecentNotification.scheduleIds) {
+        const scheduleItem = user.medicationSchedule.id(scheduleId);
+        if (scheduleItem && scheduleItem.status === "pending") {
           scheduleItem.status = "taken";
           scheduleItem.takenAt = now;
 
-          // Update pill count in prescription
-          const prescription = user.prescriptions.find(
-            (p) => p.name === medName
+          // Update prescription tracking
+          const prescription = user.prescriptions.id(
+            scheduleItem.prescriptionId
           );
-
           if (prescription) {
             prescription.tracking.pillCount -= prescription.dosage;
             prescription.tracking.dailyConsumption += prescription.dosage;
@@ -194,49 +180,43 @@ router.post("/sms/reply", async (req, res) => {
             }
           }
         }
-      });
+      }
 
-      reply = `Confirmed! You've taken your medications: ${medications.join(
+      reply = `Confirmed! You've taken your medications: ${mostRecentNotification.medications.join(
         ", "
       )}.`;
       handled = true;
     }
   }
-
   if (!handled && lowerMsg === "s") {
-    // Find the most recent pending notification
     const pendingNotifications = user.notificationHistory
       .filter((n) => n.status === "pending")
-      .sort((a, b) => b.sentAt - a.sentAt); // Sort descending by time
+      .sort((a, b) => b.sentAt - a.sentAt);
+
     if (pendingNotifications.length === 0) {
       reply = "You don't have any pending medications to skip.";
       handled = true;
     } else {
       const mostRecentNotification = pendingNotifications[0];
-      const medications = mostRecentNotification.medications;
-      // Update notification status
       mostRecentNotification.status = "skipped";
-      // Find and update corresponding schedule items
-      medications.forEach((medName) => {
-        // Find the earliest pending schedule item for this medication
-        const scheduleItem = user.medicationSchedule
-          .filter(
-            (item) =>
-              item.prescriptionName === medName && item.status === "pending"
-          )
-          .sort((a, b) => a.scheduledTime - b.scheduledTime)[0]; // Get earliest
-        if (scheduleItem) {
+
+      // Process all schedule items in this notification
+      for (const scheduleId of mostRecentNotification.scheduleIds) {
+        const scheduleItem = user.medicationSchedule.id(scheduleId);
+        if (scheduleItem && scheduleItem.status === "pending") {
           scheduleItem.status = "skipped";
-          scheduleItem.takenAt = now;
+
+          // Update prescription tracking
+          const prescription = user.prescriptions.id(
+            scheduleItem.prescriptionId
+          );
+          if (prescription) {
+            prescription.tracking.skippedCount += 1;
+          }
         }
-      });
-      // update the tracking skipped count
-      user.prescriptions.forEach((p) => {
-        if (medications.includes(p.name)) {
-          p.tracking.skippedCount += 1;
-        }
-      });
-      reply = `Skipped! You chose to skip your medications: ${medications.join(
+      }
+
+      reply = `Skipped! You chose to skip your medications: ${mostRecentNotification.medications.join(
         ", "
       )}.`;
       handled = true;

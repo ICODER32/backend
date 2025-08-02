@@ -5,7 +5,6 @@ const caregiverSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-
   phoneNumber: {
     type: String,
     required: true,
@@ -18,7 +17,7 @@ const caregiverSchema = new mongoose.Schema({
   },
   forPersons: [
     {
-      type: String, // Stores the usernames of persons the caregiver is responsible for
+      type: String,
       required: true,
     },
   ],
@@ -61,7 +60,6 @@ const prescriptionSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
-
   initialCount: {
     type: Number,
     required: true,
@@ -109,7 +107,7 @@ const userSchema = new mongoose.Schema({
   sleepTime: String,
   wakeTime: String,
   prescriptions: [prescriptionSchema],
-  caregivers: [caregiverSchema], // Updated caregiver structure
+  caregivers: [caregiverSchema],
   reminderTimes: {
     type: [String],
     validate: {
@@ -145,6 +143,12 @@ const userSchema = new mongoose.Schema({
         type: Number,
         default: 0,
       },
+      scheduleIds: [
+        {
+          // NEW: Store schedule item IDs
+          type: mongoose.Schema.Types.ObjectId,
+        },
+      ],
     },
   ],
   notificationsEnabled: {
@@ -174,7 +178,7 @@ const userSchema = new mongoose.Schema({
         default: "pending",
       },
       prescriptionName: String,
-      prescriptionId: mongoose.Schema.Types.ObjectId, // Added for better reference
+      prescriptionId: mongoose.Schema.Types.ObjectId,
     },
   ],
   tracking: {
@@ -206,7 +210,6 @@ const userSchema = new mongoose.Schema({
 userSchema.pre("save", function (next) {
   this.meta.updatedAt = Date.now();
 
-  // Initialize pill counts when activating
   if (this.isModified("status") && this.status === "active") {
     this.prescriptions.forEach((p) => {
       if (p.tracking.pillCount === 0) {
