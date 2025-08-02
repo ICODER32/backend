@@ -30,7 +30,7 @@ export function startReminderCron() {
           // Find due reminders that haven't been processed
           const dueReminders = user.medicationSchedule.filter((schedule) => {
             if (schedule.status !== "pending") return false;
-            if (schedule.reminderSent) return false;
+            if (schedule.remainderSent) return false;
 
             const scheduledTime = moment.utc(schedule.scheduledTime);
             const timeDiff = Math.abs(scheduledTime.diff(now, "minutes"));
@@ -55,7 +55,7 @@ export function startReminderCron() {
             message += `\n• ${reminder.prescriptionName} at ${timeStr}`;
           });
           message += `\n\nReply:\nD - Taken\nS - Skip`;
-
+          console.log(message);
           // Send message
           await client.messages.create({
             body: message,
@@ -65,7 +65,7 @@ export function startReminderCron() {
 
           // Update flags
           dueReminders.forEach((reminder) => {
-            reminder.reminderSent = true;
+            reminder.remainderSent = true;
           });
 
           // Add notification with schedule references
