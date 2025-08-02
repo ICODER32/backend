@@ -2,6 +2,12 @@ import express from "express";
 import Pharmacy from "../models/pharmacy.model.js";
 import User from "../models/user.model.js";
 import { configDotenv } from "dotenv";
+import moment from "moment-timezone";
+import { sendMessage } from "./user.routes.js";
+import {
+  calculateReminderTimes,
+  generateMedicationSchedule,
+} from "../utils/scheduler.js";
 configDotenv();
 const router = express.Router();
 import twilio from "twilio";
@@ -100,6 +106,91 @@ router.get("/getPharmacies", async (req, res) => {
     res.status(200).json(pharmacies);
   } catch (error) {
     res.status(500).json({ message: "Error fetching pharmacies", error });
+  }
+});
+
+router.post("/addPrescription", async (req, res) => {
+  const { phoneNumber, prescription } = req.body;
+
+  try {
+    // Validate input
+    if (!phoneNumber || !prescription) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // Find user
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Create new prescription object
+    const newPrescription = {
+      name: prescription.name,
+      timesToTake: prescription.timesToTake,
+      dosage: prescription.dosage,
+      instructions: prescription.instructions || "",
+      initialCount: prescription.initialCount,
+      remindersEnabled: true, // Automatically enable reminders
+      sideEffects: prescription.sideEffects || "",
+      tracking: {
+        pillCount: prescription.initialCount,
+        dailyConsumption: 0,
+        skippedCount: 0,
+      },
+    };
+
+    // Add to user's prescriptions
+    user.prescriptions.push(newPrescription);
+    const addedPrescription = user.prescriptions[user.prescriptions.length - 1];
+
+    // Generate schedule for new prescription only
+    const newReminders = calculateReminderTimes(
+      user.wakeTime,
+      user.sleepTime,
+      newPrescription.instructions,
+      newPrescription.timesToTake,
+      newPrescription.name,
+      newPrescription.tracking.pillCount,
+      newPrescription.dosage,
+      addedPrescription._id // Use the generated ID
+    ).map((r) => ({
+      time: r.time,
+      prescriptionName: r.prescriptionName,
+      prescriptionId: addedPrescription._id,
+      pillCount: r.pillCount,
+      dosage: r.dosage,
+    }));
+
+    // Generate schedule items
+    const newSchedule = generateMedicationSchedule(newReminders, user.timezone);
+
+    // Add to existing schedule
+    user.medicationSchedule.push(...newSchedule);
+
+    // Update user
+    await user.save();
+
+    // Send confirmation message
+    const times = newReminders
+      .map((r) => moment(r.time, "HH:mm").format("h:mm A"))
+      .join(", ");
+
+    const message =
+      `New prescription added: ${prescription.name}\n` +
+      `You'll get reminders at: ${times}\n` +
+      `Reply H for help or to change reminder times`;
+
+    await sendMessage(phoneNumber, message);
+
+    res.status(200).json({
+      success: true,
+      message: "Prescription added successfully",
+      prescription: addedPrescription,
+    });
+  } catch (error) {
+    console.error("Error adding prescription:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 });
 
